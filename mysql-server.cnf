@@ -1,0 +1,40 @@
+#
+# This group are read by MySQL server.
+# Use it for options that only the server (but not clients) should see
+#
+# For advice on how to change settings please see
+# http://dev.mysql.com/doc/refman/en/server-configuration-defaults.html
+
+# Settings user and group are ignored when systemd is used.
+# If you need to run mysqld under a different user or group,
+# customize your systemd unit file for mysqld according to the
+# instructions in http://fedoraproject.org/wiki/Systemd
+
+[mysqld]
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+log-error=/var/log/mysql/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+max_connections=150
+innodb_flush_method=O_DIRECT_NO_FSYNC
+default-time-zone='+08:00'
+innodb_flush_log_at_trx_commit=0
+sync_binlog=0
+binlog_order_commits=0
+skip_name_resolve=1
+transaction-isolation=READ-COMMITTED
+skip-log-bin
+slow_query_log=0
+#long_query_time=6
+#log_timestamps=SYSTEM
+thread_stack=256K
+innodb_buffer_pool_size=512M
+innodb_log_buffer_size=1M
+read_buffer_size=1M
+read_rnd_buffer_size=1M
+sort_buffer_size=1M
+join_buffer_size=1M
+tmp_table_size=1M
+max_heap_table_size=1M
+binlog_cache_size=1M
+performance_schema=OFF

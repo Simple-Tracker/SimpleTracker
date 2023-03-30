@@ -1,0 +1,13 @@
+pre {
+	font-size: calc(0.5vw + 11px);
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+	white-space: pre-wrap;
+	font-family: ui-monospace;
+}
+@media (prefers-color-scheme: dark) {
+	html, pre {
+		color: #fff;
+		background-color: #000;
+	}
+}

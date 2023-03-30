@@ -1,0 +1,13 @@
+[Unit]
+Description=SimpleTracker AutoClean Service
+After=mysqld.service
+
+[Service]
+Type=simple
+Restart=always
+PrivateTmp=false
+User=root
+ExecStart=/bin/sh -c "cd /var/www/html/tracker1 && /usr/bin/php autoclean.php"
+
+[Install]
+WantedBy=multi-user.target
