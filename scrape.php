@@ -47,7 +47,7 @@ if ($premiumUser) {
 	$table1TimestampWhereSQL = '';
 	$table2TimestampWhereSQL = '';
 	$compareSQL = ' AND last_timestamp >= \'' . date('Y-m-d H:i', time() - AnnounceMaxInterval) . ':00\'';
-	if ($curHour === 1 || $curHour === 3 || $curHour === 5 || $curHour === 7 || $curHour === 9 || $curHour === 11) {
+	if (OldDBName === 'Peers_1') {
 		$table1TimestampWhereSQL = $compareSQL;
 	} else {
 		$table2TimestampWhereSQL = $compareSQL;

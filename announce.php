@@ -401,7 +401,7 @@ switch ($debugLevel) {
 			($clientIPv6String ?? '空'),
 			($clientPort ?? -1),
 			($clientUserAgent ?? '空'),
-			((!empty($clientPeerID) ? substr($clientPeerID, 0, 8) : '空')),
+			(!empty($clientPeerID) ? substr($clientPeerID, 0, 8) : '空'),
 			(!empty($clientEvent) ? $clientEvent : '空'),
 			($clientSupportCrypto ? '是' : '否'),
 			($clientCompact ? '是' : '否'),
