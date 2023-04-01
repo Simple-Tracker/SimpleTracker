@@ -142,7 +142,7 @@ while (true) {
 			if ($popularTorrentsQuery !== false) {
 				$popularTorrentMessage = '';
 				while ($popularTorrentResult = $popularTorrentsQuery->fetch_assoc()) {
-					$popularTorrentMessage .= "种子 Hash: {$popularTorrentResult['info_hash']} (完成数: {$popularTorrentResult['total_completed']}).\n";
+					$popularTorrentMessage .= "种子 Hash: magnet:?xt=urn:btih:{$popularTorrentResult['info_hash']}&tr=" . ServerURL . "/announce (完成数: {$popularTorrentResult['total_completed']}).\n";
 				}
 				if ($curMonth === 1) {
 					$curYear--;

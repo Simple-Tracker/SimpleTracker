@@ -2,6 +2,7 @@
 //chdir(__DIR__);
 date_default_timezone_set('Asia/Shanghai');
 define('LogDir', 'logs-Custom');
+define('ServerURL', 'https://t1.hloli.org');
 define('ServerMessage', '服务器 Telegram 群组 (反馈与交流 BitTorrent 相关内容): https://t.me/SimpleTrackerGroup');
 
 // Database Config
@@ -36,9 +37,9 @@ define('NginxPIDFile', '/var/run/nginx.pid'); // Letters or numbers only.
 define('NginxAccessLogFile', '/var/log/nginx/access.log'); // Letters or numbers only.
 
 // Announce Config
-define('AnnounceInterval', 2400);
-define('AnnounceMinInterval', 600);
-define('ScrapeMinInterval', 600);
+define('AnnounceInterval', 900);
+define('AnnounceMinInterval', 300);
+define('ScrapeMinInterval', 300);
 define('PremiumAnnounceInterval', 60);
 define('PremiumAnnounceMinInterval', 15);
 define('AnnounceMaxInterval', 3600); // Associated with the database table, modification is not recommended.
