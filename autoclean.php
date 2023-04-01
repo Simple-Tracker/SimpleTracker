@@ -119,7 +119,7 @@ while (true) {
 		LogStr("已尝试自动限制 Bot, 返回信息: {$restrictResult}", (($restrictResult !== false) ? 0 : -1));
 	}
 	*/
-	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1); // 完成数统计. (每月 1 号执行)
+	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1 && ($curHour === 12 || $curHour === 1)); // 完成数统计. (每月 1 号的 0 点或 1 点执行)
 	$cleanRule2 = ($lastHour1 !== $curHour && $curMinute >= 50 && $curMinute <= 55); // 每小时于 45-50 分执行 1 次.
 	$cleanRule3 = ($lastHour2 !== $curHour && $curMinute >= 55 && $curMinute <= 58); // 每小时于 50-58 分执行 1 次.
 	if ($cleanRule1 || $cleanRule2 || $cleanRule3) {
