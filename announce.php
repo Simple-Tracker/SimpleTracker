@@ -124,6 +124,11 @@ if ($clientUserAgent !== null && stripos($clientUserAgent, 'bitcomet') !== false
 		die(GenerateBencode(array('failure reason' => ErrorMessage[7])));
 	}
 	$resBencodeArr['warning message'] = WarningMessage[3];
+} else if (isset($_SERVER['HTTP_WANT_DIGEST']) && !(($clientUserAgent !== null && stripos($clientUserAgent, 'aria2') !== false) || stripos($clientPeerID, 'A2') === 0)) {
+	if ($clientType !== 2) {
+		die(GenerateBencode(array('failure reason' => ErrorMessage[6])));
+	}
+	$resBencodeArr['warning message'] = WarningMessage[4];
 }
 $debugLevel = 0;
 $premiumUser = false;
@@ -164,13 +169,13 @@ if ($db->connect_errno > 0) {
 #$db->query('DELETE FROM Peers WHERE last_timestamp < DATE_SUB(NOW(), INTERVAL 12 HOUR) LIMIT 500');
 $escapedClientInfoHash = $db->escape_string($clientInfoHash);
 $escapedClientPeerID = $db->escape_string($clientPeerID);
-if (stripos($clientUserAgent, 'qbittorrent') !== false || stripos($clientPeerID, '-QB') === 0 || stripos($clientUserAgent, 'bitcomet') !== false || stripos($clientPeerID, '-BC') === 0) {
+if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== false || stripos($clientUserAgent, 'bitcomet') !== false)) || stripos($clientPeerID, '-QB') === 0 || stripos($clientPeerID, '-BC') === 0) {
 	$noWarnClient = true;
 	if (stripos($clientPeerID, '-QB') === 0) {
 		$mainClientVersion = hexdec($clientPeerID[3]);
 		$sub1ClientVersion = hexdec($clientPeerID[4]);
 		$sub2ClientVersion = hexdec($clientPeerID[5]);
-	} else if (stripos($clientUserAgent, 'qbittorrent') !== false) {
+	} else if ($clientUserAgent !== null && stripos($clientUserAgent, 'qbittorrent') !== false) {
 		$clientVerStr = strstr($clientUserAgent, '/');
 		if ($clientVerStr === false) {
 			$clientVerStr = strstr($clientUserAgent, ' ');
@@ -384,7 +389,7 @@ $corrupt = $_GET['corrupt'] ?? null;
 $redundant = $_GET['redundant'] ?? null;
 */
 if (!isset($resBencodeArr['warning message'])) {
-	if ($debugLevel === 0 && stripos($clientUserAgent, 'transmission') !== false || stripos($clientPeerID, '-TR') === 0) {
+	if ($debugLevel === 0 && ($clientUserAgent !== null && stripos($clientUserAgent, 'transmission') !== false) || stripos($clientPeerID, '-TR') === 0) {
 		$resBencodeArr['interval'] *= 2;
 		$resBencodeArr['min interval'] *= 2;
 	} else {
