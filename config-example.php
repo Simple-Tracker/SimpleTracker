@@ -23,7 +23,7 @@ define('OldDBName', 'Peers_' . (CurDBName === 'Peers_2' ? '1' : '2'));
 define('GeneralDebugKey', '221210');
 define('AdminKey', 'ak-');
 define('UserKeyPrefix', 'uk-');
-define('UserKeyDir', 'UserKey-Custom');
+#define('UserKeyDir', 'UserKey-Custom');
 
 // Telegram Config
 define('TG_API_URL', 'https://api.telegram.org/botid:botsecret/');

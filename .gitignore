@@ -1,6 +1,6 @@
 .DS_Store
 config.php
 nginx.conf
-logs*
-UserKey*
-Callback*
+*logs*
+*Key*
+*Callback*

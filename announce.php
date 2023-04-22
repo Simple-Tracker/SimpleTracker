@@ -87,6 +87,23 @@ function AddIPToArr(&$arr, ...$ipArr) {
 		}
 	}
 }
+// 返回 Debug Level.
+function CheckKeyAvailability(string $key): int {
+	if ($key === GeneralDebugKey) {
+		return 1;
+	}
+	if ($key === AdminKey) {
+		return 10;
+	}
+	global $db;
+	if (strpos($key, UserKeyPrefix) === 0) {
+		$clientEscapedDebugKey = $db->escape_string($key);
+		if (($keyAvailabilityCheckQuery = $db->query("SELECT 1 FROM SimpleTrackerKey WHERE `key` = '{$clientEscapedDebugKey}' AND (expiry_date > CURDATE() OR expiry_date IS NULL) LIMIT 1")) !== false && $keyAvailabilityCheckQuery->num_rows > 0) {
+			return 10;
+		}
+	}
+	return 0;
+}
 require_once('config.php');
 require_once('include.bencode.php');
 header('Content-Type: text/plain; charset=utf-8');
@@ -130,23 +147,25 @@ if ($clientUserAgent !== null && stripos($clientUserAgent, 'bitcomet') !== false
 	}
 	$resBencodeArr['warning message'] = WarningMessage[4];
 }
+$db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
+if ($db->connect_errno > 0) {
+	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+}
 $debugLevel = 0;
 $premiumUser = false;
 if (isset($_GET['debug'])) {
-	if ($_GET['debug'] === GeneralDebugKey) {
-		$debugLevel = 1;
-	} else if ($_GET['debug'] === AdminKey || (strpos($_GET['debug'], UserKeyPrefix) === 0 && strpos($_GET['debug'], '.') === false && is_file(UserKeyDir . "/{$_GET['debug']}"))) {
-		$debugLevel = 10;
-		$premiumUser = true;
-	} else {
+	$debugLevel = CheckKeyAvailability($_GET['debug']);
+	if ($debugLevel === 0) {
 		die(GenerateBencode(array('failure reason' => ErrorMessage[8])));
+	}
+	if ($debugLevel === 10) {
+		$premiumUser = true;
 	}
 } else if (isset($_GET['p'])) {
-	if ($_GET['p'] === AdminKey || (strpos($_GET['p'], UserKeyPrefix) === 0 && strpos($_GET['p'], '.') === false && is_file(UserKeyDir . "/{$_GET['p']}"))) {
-		$premiumUser = true;
-	} else {
+	if (CheckKeyAvailability($_GET['p']) <= 1) {
 		die(GenerateBencode(array('failure reason' => ErrorMessage[8])));
 	}
+	$premiumUser = true;
 }
 $resBencodeArr = array('interval' => AnnounceInterval, 'min interval' => AnnounceMinInterval, 'complete' => 0, 'incomplete' => 0, 'downloaded' => 0, 'peers' => array());
 if ($premiumUser) {
@@ -159,11 +178,6 @@ if ($clientCompact) {
 	$resBencodeArr['peers6'] = '';
 }
 $curTime = time();
-mysqli_report(MYSQLI_REPORT_OFF);
-$db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
-if ($db->connect_errno > 0) {
-	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
-}
 #$db->set_charset('utf8mb4');
 #$db->query('SET NAMES utf8mb4 COLLATE utf8mb4_general_ci');
 #$db->query('DELETE FROM Peers WHERE last_timestamp < DATE_SUB(NOW(), INTERVAL 12 HOUR) LIMIT 500');
