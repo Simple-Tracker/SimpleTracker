@@ -24,6 +24,23 @@ define('GeneralDebugKey', '221210');
 define('AdminKey', 'ak-');
 define('UserKeyPrefix', 'uk-');
 #define('UserKeyDir', 'UserKey-Custom');
+// 返回 Debug Level.
+function CheckKeyAvailability(string $key): int {
+	if ($key === GeneralDebugKey) {
+		return 1;
+	}
+	if ($key === AdminKey) {
+		return 10;
+	}
+	global $db;
+	if (strpos($key, UserKeyPrefix) === 0) {
+		$clientEscapedDebugKey = $db->escape_string($key);
+		if (($keyAvailabilityCheckQuery = $db->query("SELECT 1 FROM SimpleTrackerKey WHERE `key` = '{$clientEscapedDebugKey}' AND (expiry_date > CURDATE() OR expiry_date IS NULL) LIMIT 1")) !== false && $keyAvailabilityCheckQuery->num_rows > 0) {
+			return 10;
+		}
+	}
+	return 0;
+}
 
 // Telegram Config
 define('TG_API_URL', 'https://api.telegram.org/botid:botsecret/');

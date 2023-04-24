@@ -87,23 +87,6 @@ function AddIPToArr(&$arr, ...$ipArr) {
 		}
 	}
 }
-// 返回 Debug Level.
-function CheckKeyAvailability(string $key): int {
-	if ($key === GeneralDebugKey) {
-		return 1;
-	}
-	if ($key === AdminKey) {
-		return 10;
-	}
-	global $db;
-	if (strpos($key, UserKeyPrefix) === 0) {
-		$clientEscapedDebugKey = $db->escape_string($key);
-		if (($keyAvailabilityCheckQuery = $db->query("SELECT 1 FROM SimpleTrackerKey WHERE `key` = '{$clientEscapedDebugKey}' AND (expiry_date > CURDATE() OR expiry_date IS NULL) LIMIT 1")) !== false && $keyAvailabilityCheckQuery->num_rows > 0) {
-			return 10;
-		}
-	}
-	return 0;
-}
 require_once('config.php');
 require_once('include.bencode.php');
 header('Content-Type: text/plain; charset=utf-8');
