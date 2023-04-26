@@ -93,9 +93,9 @@ header('Content-Type: text/plain; charset=utf-8');
 $clientUserAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
 $clientInfoHash = $_GET['info_hash'] ?? null;
 $clientPeerID = $_GET['peer_id'] ?? null;
-$clientEvent = $_GET['event'] ?? null;
+$clientEvent = $_GET['event'] ?? '';
 $clientSupportCrypto = (isset($_GET['supportcrypto']) && intval($_GET['supportcrypto']) === 1) ? true : false;
-if ($clientInfoHash === null || $clientPeerID === null || (!empty($clientEvent) && !in_array(strtolower($clientEvent), array('started', 'stopped', 'paused', 'completed', 'update'))) || ($clientUserAgent !== null && strlen($clientUserAgent) > 233)) {
+if ($clientInfoHash === null || $clientPeerID === null || ($clientEvent !== '' && !in_array(strtolower($clientEvent), array('started', 'stopped', 'paused', 'completed', 'update'))) || ($clientUserAgent !== null && strlen($clientUserAgent) > 233)) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[2])));
 } else if ($clientUserAgent !== null && (empty($clientUserAgent) || stripos($clientUserAgent, 'Amazon CloudFront') !== false)) {
 	$clientUserAgent = null;
@@ -163,7 +163,7 @@ if ($clientCompact) {
 	$resBencodeArr['peers6'] = '';
 }
 if ($premiumUser) {
-	if ($curSimpleTrackerKey !== null && (empty($clientEvent) || !in_array(strtolower($clientEvent), array('stopped', 'paused'))) && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
+	if ($curSimpleTrackerKey !== null && ($clientEvent === '' || !in_array(strtolower($clientEvent), array('stopped', 'paused'))) && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
 		if (strlen($_GET['m']) > 48) {
 			die(GenerateBencode(array('failure reason' => ErrorMessage[9])));
 		}
@@ -237,63 +237,65 @@ if ($clientNumwant < 1 || $clientNumwant > 1000) {
 }
 $clientNoPeerID = (isset($_GET['no_peer_id']) && intval($_GET['no_peer_id']) === 1) ? true : false;
 $basicPeerQuerySQL = 'SELECT peer_id, last_timestamp, last_type, ipv4, ipv6, port';
-$table1PeerQuerySQL = "{$basicPeerQuerySQL} FROM Peers_1 WHERE info_hash = ? AND peer_id != ? AND (last_event IS NULL OR (last_event != 'stopped' AND last_event != 'paused'))";
-$table2PeerQuerySQL = "{$basicPeerQuerySQL} FROM Peers_2 WHERE info_hash = ? AND peer_id != ? AND (last_event IS NULL OR (last_event != 'stopped' AND last_event != 'paused'))";
+$table1PeerQuerySQL = "{$basicPeerQuerySQL} FROM Peers_1 WHERE info_hash = ? AND peer_id != ? AND last_event != 'stopped' AND last_event != 'paused'";
+$table2PeerQuerySQL = "{$basicPeerQuerySQL} FROM Peers_2 WHERE info_hash = ? AND peer_id != ? AND last_event != 'stopped' AND last_event != 'paused'";
 $compareSQL = ' AND last_timestamp >= \'' . date('Y-m-d H:i', ($curTime - AnnounceMaxInterval)) . ':00\'';
 if (OldDBName === 'Peers_1') {
 	$table1PeerQuerySQL .= $compareSQL;
 } else {
 	$table2PeerQuerySQL .= $compareSQL;
 }
-$peerQuerySTMT = $db->prepare("({$table1PeerQuerySQL} ORDER BY last_timestamp DESC LIMIT ?) UNION ALL ({$table2PeerQuerySQL} ORDER BY last_timestamp DESC LIMIT ?) ORDER BY last_timestamp DESC LIMIT ?");
-$peerQuerySTMT->bind_param('ssissii', $clientInfoHash, $clientPeerID, $clientNumwant, $clientInfoHash, $clientPeerID, $clientNumwant, $clientNumwant);
-$peerQuerySTMT->bind_result($peerID, $peerLastTimestamp, $peerType, $peerIPv4Str, $peerIPv6Str, $peerPort);
-$peerQuerySTMT->execute();
-while ($peerQuerySTMT->fetch()) {
-	if (empty($peerID)) {
-		continue;
-	}
-	if ($peerType === 2) {
-		$torrentSeeder++;
-	} else if ($peerType === 1) {
-		$torrentLeecher++;
-	}
-	if ($peerPort !== 0 && $peerPort !== 1) {
-		if (!empty($peerIPv4Str)) {
-			$peerIPv4List = explode(',', $peerIPv4Str);
-			foreach ($peerIPv4List as $peerIPv4) {
-				if ($clientCompact) {
-					$resBencodeArr['peers'] .= inet_pton($peerIPv4) . pack('n', $peerPort);
-					continue;
+if ($clientEvent === '' || in_array(strtolower($clientEvent), array('started', 'completed', 'update'))) {
+	$peerQuerySTMT = $db->prepare("({$table1PeerQuerySQL} ORDER BY last_timestamp DESC LIMIT ?) UNION ALL ({$table2PeerQuerySQL} ORDER BY last_timestamp DESC LIMIT ?) ORDER BY last_timestamp DESC LIMIT ?");
+	$peerQuerySTMT->bind_param('ssissii', $clientInfoHash, $clientPeerID, $clientNumwant, $clientInfoHash, $clientPeerID, $clientNumwant, $clientNumwant);
+	$peerQuerySTMT->bind_result($peerID, $peerLastTimestamp, $peerType, $peerIPv4Str, $peerIPv6Str, $peerPort);
+	$peerQuerySTMT->execute();
+	while ($peerQuerySTMT->fetch()) {
+		if (empty($peerID)) {
+			continue;
+		}
+		if ($peerType === 2) {
+			$torrentSeeder++;
+		} else if ($peerType === 1) {
+			$torrentLeecher++;
+		}
+		if ($peerPort !== 0 && $peerPort !== 1) {
+			if (!empty($peerIPv4Str)) {
+				$peerIPv4List = explode(',', $peerIPv4Str);
+				foreach ($peerIPv4List as $peerIPv4) {
+					if ($clientCompact) {
+						$resBencodeArr['peers'] .= inet_pton($peerIPv4) . pack('n', $peerPort);
+						continue;
+					}
+					$tArr = array();
+					if (!$clientNoPeerID) {
+						$tArr['peer_id'] = $peerID;
+					}
+					$tArr['ip'] = $peerIPv4;
+					$tArr['port'] = $peerPort;
+					$resBencodeArr['peers'][] = $tArr;
 				}
-				$tArr = array();
-				if (!$clientNoPeerID) {
-					$tArr['peer_id'] = $peerID;
+			}
+			if (!empty($peerIPv6Str)) {
+				$peerIPv6List = explode(',', $peerIPv6Str);
+				foreach ($peerIPv6List as $peerIPv6) {
+					if ($clientCompact) {
+						$resBencodeArr['peers6'] .= inet_pton($peerIPv6) . pack('n', $peerPort);
+						continue;
+					}
+					$tArr = array();
+					if (!$clientNoPeerID) {
+						$tArr['peer_id'] = $peerID;
+					}
+					$tArr['ip'] = $peerIPv6;
+					$tArr['port'] = $peerPort;
+					$resBencodeArr['peers'][] = $tArr;
 				}
-				$tArr['ip'] = $peerIPv4;
-				$tArr['port'] = $peerPort;
-				$resBencodeArr['peers'][] = $tArr;
 			}
 		}
-		if (!empty($peerIPv6Str)) {
-			$peerIPv6List = explode(',', $peerIPv6Str);
-			foreach ($peerIPv6List as $peerIPv6) {
-				if ($clientCompact) {
-					$resBencodeArr['peers6'] .= inet_pton($peerIPv6) . pack('n', $peerPort);
-					continue;
-				}
-				$tArr = array();
-				if (!$clientNoPeerID) {
-					$tArr['peer_id'] = $peerID;
-				}
-				$tArr['ip'] = $peerIPv6;
-				$tArr['port'] = $peerPort;
-				$resBencodeArr['peers'][] = $tArr;
-			}
-		}
 	}
+	$peerQuerySTMT->close();
 }
-$peerQuerySTMT->close();
 if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
 	$clientIP = $_SERVER['HTTP_CF_CONNECTING_IP'];
 } else if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
@@ -359,7 +361,7 @@ $resBencodeArr['incomplete'] = $torrentLeecher;
 $resBencodeArr['downloaded'] = $torrentDownloaded;
 if ($clientType !== 0) {
 	$minIntervalCompareDate = date('Y-m-d H:i:s', ($curTime - $resBencodeArr['min interval'] + ceil($resBencodeArr['min interval'] / 10)));
-	$clientReannounceQuery = $db->query("(SELECT ipv4, ipv6 FROM Peers_1 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_event " . (($clientEvent === null) ? 'IS NULL' : "= '{$clientEvent}'") . " AND last_type = {$clientType} AND last_timestamp > '{$minIntervalCompareDate}' LIMIT 1) UNION ALL (SELECT ipv4, ipv6 FROM Peers_2 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_event " . (($clientEvent === null) ? 'IS NULL' : "= '{$clientEvent}'") . " AND last_type = {$clientType} AND last_timestamp > '{$minIntervalCompareDate}' LIMIT 1) LIMIT 1");
+	$clientReannounceQuery = $db->query("(SELECT ipv4, ipv6 FROM Peers_1 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_event = '{$clientEvent}' AND last_type = {$clientType} AND last_timestamp > '{$minIntervalCompareDate}' LIMIT 1) UNION ALL (SELECT ipv4, ipv6 FROM Peers_2 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_event = '{$clientEvent}' AND last_type = {$clientType} AND last_timestamp > '{$minIntervalCompareDate}' LIMIT 1) LIMIT 1");
 	$clientIsReannounced = ($clientReannounceQuery->num_rows > 0);
 	if ($clientIsReannounced && ($clientReannounceResult = $clientReannounceQuery->fetch_row()) !== false && $clientReannounceResult !== null) {
 		if (!empty($clientReannounceResult[0])) {
@@ -422,7 +424,7 @@ switch ($debugLevel) {
 			($clientPort ?? -1),
 			($clientUserAgent ?? '空'),
 			(!empty($clientPeerID) ? substr($clientPeerID, 0, 8) : '空'),
-			(!empty($clientEvent) ? $clientEvent : '空'),
+			($clientEvent !== '' ? $clientEvent : '空'),
 			($clientSupportCrypto ? '是' : '否'),
 			($clientCompact ? '是' : '否'),
 			(($clientCompact || $clientNoPeerID) ? '是' : '否'),

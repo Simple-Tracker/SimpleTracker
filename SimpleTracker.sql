@@ -26,6 +26,7 @@ CREATE TABLE `Messages` (
   `message` varchar(24) DEFAULT NULL,
   `last_timestamp` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`info_hash`,`key`)
+  KEY `last_timestamp` (`last_timestamp` DESC) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------

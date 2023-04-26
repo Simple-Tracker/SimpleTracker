@@ -55,14 +55,14 @@ if ($premiumUser) {
 	foreach ($clientInfoHashList as $value) {
 		$escapeValue = $db->escape_string($value);
 		$queryWhereSQL .= "info_hash = '{$escapeValue}' OR ";
-		$torrentSeeder = $db->query("SELECT SUM(count_seeder) FROM ((SELECT COUNT(1) as count_seeder FROM Peers_1 WHERE last_type = 2 AND (last_event IS NULL OR (last_event != 'stopped' AND last_event != 'paused')) AND info_hash = '{$escapeValue}' {$table1TimestampWhereSQL}) UNION ALL (SELECT COUNT(1) as count_seeder FROM Peers_2 WHERE last_type = 2 AND (last_event IS NULL OR (last_event != 'stopped' AND last_event != 'paused')) AND info_hash = '{$escapeValue}' {$table2TimestampWhereSQL})) as total_seeder");
+		$torrentSeeder = $db->query("SELECT SUM(count_seeder) FROM ((SELECT COUNT(1) as count_seeder FROM Peers_1 WHERE last_type = 2 AND last_event != 'stopped' AND last_event != 'paused' AND info_hash = '{$escapeValue}' {$table1TimestampWhereSQL}) UNION ALL (SELECT COUNT(1) as count_seeder FROM Peers_2 WHERE last_type = 2 AND last_event != 'stopped' AND last_event != 'paused' AND info_hash = '{$escapeValue}' {$table2TimestampWhereSQL})) as total_seeder");
 		if ($torrentSeeder === false) {
 			$torrentSeeder = 0;
 		} else {
 			$torrentSeederRow = $torrentSeeder->fetch_row();
 			$torrentSeeder = ($torrentSeederRow !== false && $torrentSeederRow !== null) ? intval($torrentSeederRow[0]) : 0;
 		}
-		$torrentLeecher = $db->query("SELECT SUM(count_leecher) FROM ((SELECT COUNT(1) as count_leecher FROM Peers_1 WHERE last_type = 1 AND (last_event IS NULL OR (last_event != 'stopped' AND last_event != 'paused')) AND info_hash = '{$escapeValue}' {$table1TimestampWhereSQL}) UNION ALL (SELECT COUNT(1) as count_leecher FROM Peers_2 WHERE last_type = 1 AND (last_event IS NULL OR (last_event != 'stopped' AND last_event != 'paused')) AND info_hash = '{$escapeValue}' {$table2TimestampWhereSQL})) as total_leecher");
+		$torrentLeecher = $db->query("SELECT SUM(count_leecher) FROM ((SELECT COUNT(1) as count_leecher FROM Peers_1 WHERE last_type = 1 AND last_event != 'stopped' AND last_event != 'paused' AND info_hash = '{$escapeValue}' {$table1TimestampWhereSQL}) UNION ALL (SELECT COUNT(1) as count_leecher FROM Peers_2 WHERE last_type = 1 AND last_event != 'stopped' AND last_event != 'paused' AND info_hash = '{$escapeValue}' {$table2TimestampWhereSQL})) as total_leecher");
 		if ($torrentLeecher === false) {
 			$torrentLeecher = 0;
 		} else {
