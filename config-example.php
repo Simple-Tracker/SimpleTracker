@@ -26,19 +26,23 @@ define('UserKeyPrefix', 'uk-');
 #define('UserKeyDir', 'UserKey-Custom');
 // 返回 Debug Level.
 function CheckKeyAvailability(string $key): int {
+	global $db, $curSimpleTrackerKey;
 	if ($key === GeneralDebugKey) {
+		$curSimpleTrackerKey = GeneralDebugKey;
 		return 1;
 	}
 	if ($key === AdminKey) {
+		$curSimpleTrackerKey = AdminKey;
 		return 10;
 	}
-	global $db;
 	if (strpos($key, UserKeyPrefix) === 0) {
 		$clientEscapedDebugKey = $db->escape_string($key);
 		if (($keyAvailabilityCheckQuery = $db->query("SELECT 1 FROM SimpleTrackerKey WHERE `key` = '{$clientEscapedDebugKey}' AND (expiry_date > CURDATE() OR expiry_date IS NULL) LIMIT 1")) !== false && $keyAvailabilityCheckQuery->num_rows > 0) {
+			$curSimpleTrackerKey = $clientEscapedDebugKey;
 			return 10;
 		}
 	}
+	$curSimpleTrackerKey = null;
 	return 0;
 }
 
@@ -57,8 +61,8 @@ define('NginxAccessLogFile', '/var/log/nginx/access.log'); // Letters or numbers
 define('AnnounceInterval', 900);
 define('AnnounceMinInterval', 300);
 define('ScrapeMinInterval', 300);
-define('PremiumAnnounceInterval', 60);
-define('PremiumAnnounceMinInterval', 15);
+define('PremiumAnnounceInterval', 300);
+define('PremiumAnnounceMinInterval', 60);
 define('AnnounceMaxInterval', 3600); // Associated with the database table, modification is not recommended.
 
 // Message Config
@@ -70,11 +74,13 @@ define('ErrorMessage', array(
 	5 => '服务器认为 Tracker 地址有误. (EC: 5)',
 	6 => '服务器已禁止你的客户端, 建议你换用其它客户端. (EC: 6)',
 	7 => 'The server has banned your client, it is recommended that you switch to the new version of the client. (EC: 7)',
-	8 => '服务器无法验证这个 SimpleTracker Key. (EC: 8)'
+	8 => '服务器无法验证这个 SimpleTracker Key. (EC: 8)',
+	9 => '服务器认为传递的信息不合法. (EC: 9)'
 ));
 define('WarningMessage', array(
 	1 => '服务器无法验证你的端口, 因此你的速度可能会受到影响. (WC: 1)',
 	2 => '服务器无法接收到你的上传或下载数据, 因此无法进行统计. (WC: 2)', // 已淘汰
-	3 => 'The server has banned your client, it is recommended that you switch to the new version of the client. (WC: 3)'
+	3 => 'The server has banned your client, it is recommended that you switch to the new version of the client. (WC: 3)',
+	4 => '服务器可能会禁止你的客户端, 建议你换用其它客户端. (WC: 4)'
 ));
 ?>

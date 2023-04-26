@@ -150,22 +150,40 @@ if (isset($_GET['debug'])) {
 	}
 	$premiumUser = true;
 }
-$resBencodeArr = array('interval' => AnnounceInterval, 'min interval' => AnnounceMinInterval, 'complete' => 0, 'incomplete' => 0, 'downloaded' => 0, 'peers' => array());
-if ($premiumUser) {
-	$resBencodeArr['interval'] = PremiumAnnounceInterval;
-	$resBencodeArr['min interval'] = PremiumAnnounceMinInterval;
-}
-$clientCompact = (isset($_GET['compact']) && intval($_GET['compact']) === 1) ? true : false;
-if ($clientCompact) {
-	$resBencodeArr['peers'] = '';
-	$resBencodeArr['peers6'] = '';
-}
 $curTime = time();
 #$db->set_charset('utf8mb4');
 #$db->query('SET NAMES utf8mb4 COLLATE utf8mb4_general_ci');
 #$db->query('DELETE FROM Peers WHERE last_timestamp < DATE_SUB(NOW(), INTERVAL 12 HOUR) LIMIT 500');
 $escapedClientInfoHash = $db->escape_string($clientInfoHash);
 $escapedClientPeerID = $db->escape_string($clientPeerID);
+$resBencodeArr = array('interval' => AnnounceInterval, 'min interval' => AnnounceMinInterval, 'complete' => 0, 'incomplete' => 0, 'downloaded' => 0, 'peers' => array());
+$clientCompact = (isset($_GET['compact']) && intval($_GET['compact']) === 1) ? true : false;
+if ($clientCompact) {
+	$resBencodeArr['peers'] = '';
+	$resBencodeArr['peers6'] = '';
+}
+if ($premiumUser) {
+	if ($curSimpleTrackerKey !== null && (empty($clientEvent) || !in_array(strtolower($clientEvent), array('stopped', 'paused'))) && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
+		if (strlen($_GET['m']) > 48) {
+			die(GenerateBencode(array('failure reason' => ErrorMessage[9])));
+		}
+		$clientMessageEscapedContent = $db->escape_string($_GET['m']);
+		$clientMessageInsertQuery = $db->query("INSERT INTO Messages (`info_hash`, `key`, `message`) VALUES ('{$escapedClientInfoHash}', '{$curSimpleTrackerKey}', '{$clientMessageEscapedContent}') ON DUPLICATE KEY UPDATE message = VALUE(message), last_timestamp = current_timestamp()");
+		/*
+		已在下面的列表中包含.
+		$clientMessageStatus = ($clientMessageInsertQuery !== false ? '信息传递成功' : '信息传递失败');
+		$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $clientMessageStatus : "{$clientMessageStatus} | {$resBencodeArr['warning message']}");
+		*/
+	}
+	$resBencodeArr['interval'] = PremiumAnnounceInterval;
+	$resBencodeArr['min interval'] = PremiumAnnounceMinInterval;
+}
+$clientMessageIntervalCompareDate = date('Y-m-d H:i', ($curTime - PremiumAnnounceInterval - ceil(PremiumAnnounceInterval / 10))) . ':00';
+$clientMessageListQuery = $db->query("SELECT GROUP_CONCAT(message ORDER BY last_timestamp DESC SEPARATOR ' + ' LIMIT 3) FROM Messages WHERE info_hash = '{$escapedClientInfoHash}' AND last_timestamp > '{$clientMessageIntervalCompareDate}' LIMIT 1");
+if ($clientMessageListQuery !== false && ($clientMessageListResult = $clientMessageListQuery->fetch_row()) !== false && $clientMessageListResult !== null && !empty($clientMessageListResult[0])) {
+	$clientMessageList = "其它客户端传递的信息: {$clientMessageListResult[0]}";
+	$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $clientMessageList : "{$clientMessageList} | {$resBencodeArr['warning message']}");
+}
 if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== false || stripos($clientUserAgent, 'bitcomet') !== false)) || stripos($clientPeerID, '-QB') === 0 || stripos($clientPeerID, '-BC') === 0) {
 	$noWarnClient = true;
 	if (stripos($clientPeerID, '-QB') === 0) {

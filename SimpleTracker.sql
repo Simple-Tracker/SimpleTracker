@@ -10,11 +10,23 @@
  Target Server Version : 101102
  File Encoding         : 65001
 
- Date: 22/04/2023 17:46:47
+ Date: 26/04/2023 17:24:55
 */
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
+
+-- ----------------------------
+-- Table structure for Messages
+-- ----------------------------
+DROP TABLE IF EXISTS `Messages`;
+CREATE TABLE `Messages` (
+  `info_hash` char(40) NOT NULL,
+  `key` varchar(24) NOT NULL,
+  `message` varchar(24) DEFAULT NULL,
+  `last_timestamp` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`info_hash`,`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------
 -- Table structure for Peers_1
@@ -62,7 +74,7 @@ CREATE TABLE `SimpleTrackerKey` (
   `key` varchar(24) NOT NULL,
   `expiry_date` date DEFAULT (curdate() + interval 3 month),
   PRIMARY KEY (`key`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------
 -- Table structure for Torrents
