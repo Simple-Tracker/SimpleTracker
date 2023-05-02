@@ -18,6 +18,7 @@ function LogStr(string $message, int $status = 0, bool $logToFile = true): bool 
 }
 function SendMessage(string $message) {
 	if (empty($message)) {
+		LogStr('发送消息失败, 因为消息为空', -1);
 		return false;
 	}
 	return @file_get_contents(TG_API_URL . 'sendMessage?chat_id='  . TG_GROUP . '&text=' . rawurlencode($message));
@@ -119,7 +120,7 @@ while (true) {
 		LogStr("已尝试自动限制 Bot, 返回信息: {$restrictResult}", (($restrictResult !== false) ? 0 : -1));
 	}
 	*/
-	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1 && ($curHour === 12 || $curHour === 1)); // 完成数统计. (每月 1 号的 0 点或 1 点执行)
+	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1); // 完成数统计. (每月 1 号执行)
 	$cleanRule2 = ($lastHour1 !== $curHour && $curMinute >= 50 && $curMinute <= 55); // 每小时于 45-50 分执行 1 次.
 	$cleanRule3 = ($lastHour2 !== $curHour && $curMinute >= 55 && $curMinute <= 58); // 每小时于 50-58 分执行 1 次.
 	if ($cleanRule1 || $cleanRule2 || $cleanRule3) {
@@ -142,7 +143,7 @@ while (true) {
 			if ($popularTorrentsQuery !== false) {
 				$popularTorrentMessage = '';
 				while ($popularTorrentResult = $popularTorrentsQuery->fetch_assoc()) {
-					$popularTorrentMessage .= "种子 Hash: magnet:?xt=urn:btih:{$popularTorrentResult['info_hash']}&tr=" . ServerURL . "/announce (完成数: {$popularTorrentResult['total_completed']}).\n";
+					$popularTorrentMessage .= "种子 Hash: {$popularTorrentResult['info_hash']} (完成数: {$popularTorrentResult['total_completed']}).\n";
 				}
 				if ($curMonth === 1) {
 					$curYear--;
@@ -153,15 +154,10 @@ while (true) {
 				$startDate = "{$curYear}-{$curMonth}-01";
 				$endDate = date('Y-m-d', strtotime('-1 day'));
 				$popularTorrentMessage = "服务器 Tracker 已统计完成数记录 ({$startDate} 至 {$endDate}), 本次花费时间: " . round(microtime(true) - $queryTimeStart1, 3) . " 秒, 并将进行自动清理.\n本月共计完成数: {$totalCompleted}.\n\n{$popularTorrentMessage}";
-				$retrySendMessageCount = 0;
-				while (SendMessage($popularTorrentMessage) === false) {
-					$retrySendMessageCount++;
-					if ($retrySendMessageCount > 2) {
-						LogStr('发送消息失败, 将不清理 MySQL Torrents 表', -1);
-						break;
-					}
-				}
-				if ($retrySendMessageCount < 3) {
+				if (($sendMessageRetCode = SendMessage($popularTorrentMessage)) === false) {
+					$lastDate1 = 0;
+					LogStr('发送消息失败, 将不清理 MySQL Torrents 表 (返回值: ' . var_export($sendMessageRetCode, true) . ')', -1);
+				} else {
 					$cleanTimeStart1 = microtime(true);
 					if ($db->query('TRUNCATE TABLE Torrents') !== false) {
 						LogStr('清理 MySQL Torrents 表成功, 本次花费时间: ' . round(microtime(true) - $cleanTimeStart1, 3) . ' 秒');
