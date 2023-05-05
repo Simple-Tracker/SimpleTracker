@@ -213,14 +213,14 @@ if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== 
 		$noWarnClient = false;
 	}
 	if ($noWarnClient) {
-		$intervalCompareDate = date('Y-m-d H:i', ($curTime - $resBencodeArr['interval'])) . ':00';
-		$noWarnClientMinIntervalCompareDate = date('Y-m-d H:i:s', ($curTime + ceil($resBencodeArr['interval'] / 10) - ceil($resBencodeArr['interval'] / 3)));
+		$intervalCompareDate = date('Y-m-d H:i', ($curTime - ($resBencodeArr['interval'] * 2))) . ':00';
+		$noWarnClientMinIntervalCompareDate = date('Y-m-d H:i:s', ($curTime + ceil($resBencodeArr['interval'] * 2 / 10) - ceil($resBencodeArr['interval'] * 2 / 3)));
 		$noWarnClientAnnounceIntervalCheck = $db->query("(SELECT 1 FROM Peers_1 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_timestamp > '{$intervalCompareDate}' AND last_timestamp < '{$noWarnClientMinIntervalCompareDate}' LIMIT 1) UNION ALL (SELECT 1 FROM Peers_2 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_timestamp > '{$intervalCompareDate}' AND last_timestamp < '{$noWarnClientMinIntervalCompareDate}' LIMIT 1) LIMIT 1");
 		if ($noWarnClientAnnounceIntervalCheck->num_rows > 0) {
 			die(GenerateBencode(array('failure reason' => (isset($resBencodeArr['warning message']) ? $resBencodeArr['warning message'] : ServerMessage))));
 		}
 		$noWarnClientAnnounceIntervalCheck->close();
-		$resBencodeArr['interval'] = intval(ceil($resBencodeArr['interval'] / 2));
+		//$resBencodeArr['interval'] = intval(ceil($resBencodeArr['interval'] / 2));
 		$resBencodeArr['min interval'] = $resBencodeArr['interval'];
 	} else if (isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) && $mainClientVersion !== false && $sub1ClientVersion !== false && $sub2ClientVersion !== false && ($mainClientVersion === 4 && $sub1ClientVersion === 5 && $sub2ClientVersion < 2)) {
 		$qB45WarningMessage = 'qBittorrent 4.5 系列 Web UI 暴出未授权任意文件访问漏洞, 将影响安全性. 如果你正在使用该系列客户端, 请考虑升级 4.5.2/关闭 Web UI 对外访问/降级.';
