@@ -19,11 +19,18 @@ $curHour = intval(date('h'));
 define('CurDBName', 'Peers_' . (($curHour === 2 || $curHour === 4 || $curHour === 6 || $curHour === 8 || $curHour === 10 || $curHour === 12) ? '1' : '2'));
 define('OldDBName', 'Peers_' . (CurDBName === 'Peers_2' ? '1' : '2'));
 
+// Redis Config
+define('CacheAddress', '/var/run/redis/redis.sock');
+define('CachePort', 0);
+define('CachePersistence', true);
+define('CacheAuth', null); // auth or null.
+define('CacheRetryWaitTime', 10);
+
 // Key Config
 define('GeneralDebugKey', '221210');
 define('AdminKey', 'ak-');
 define('UserKeyPrefix', 'uk-');
-#define('UserKeyDir', 'UserKey-Custom');
+define('UserKeyDir', 'UserKey-Custom');
 // 返回 Debug Level.
 function CheckKeyAvailability(string $key): int {
 	global $db, $curSimpleTrackerKey;
@@ -53,17 +60,18 @@ define('TG_GROUP', '@SimpleTrackerGroup');
 // Autoclean Config
 define('CheckInterval', 2);
 define('IndexSleepTime', 500000); // Microsecond, 1 Second = 1000000 Microsecond.
-define('IndexCount', 10000);
+define('IndexSleepTime_Scan', 100000); // Microsecond, 1 Second = 1000000 Microsecond.
+define('IndexCount', 50000);
 define('NginxPIDFile', '/var/run/nginx.pid'); // Letters or numbers only.
 define('NginxAccessLogFile', '/var/log/nginx/access.log'); // Letters or numbers only.
 
 // Announce Config
-define('AnnounceInterval', 900);
-define('AnnounceMinInterval', 300);
-define('ScrapeMinInterval', 300);
+define('AnnounceInterval', 1800);
+define('AnnounceMinInterval', 900);
+define('ScrapeMinInterval', 900);
 define('PremiumAnnounceInterval', 300);
 define('PremiumAnnounceMinInterval', 60);
-define('AnnounceMaxInterval', 3600); // Associated with the database table, modification is not recommended.
+define('AnnounceMaxInterval', 4800); // Associated with the database table, modification is not recommended.
 
 // Message Config
 define('ErrorMessage', array(

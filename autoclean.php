@@ -43,9 +43,13 @@ function ConnectDB(): bool {
 	if ($db === null) {
 		$db = @new MySQLi(DBAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
 	}
+	if (!isset($db->connect_errno) || !is_int($db->connect_errno)) {
+		LogStr('连接数据库时发生错误, 错误代码: 未知', -1);
+		return false;
+	}
 	if ($db->connect_errno > 0) {
-		CloseDB();
 		LogStr('连接数据库时发生错误, 错误代码: ' . $db->connect_errno, -1);
+		$db = null;
 		return false;
 	}
 	return true;
@@ -58,12 +62,41 @@ function CloseDB(): bool {
 	}
 	return true;
 }
+function ConnectCache(): bool {
+	global $cache;
+	if ($cache === null) {
+		$cache = new Redis();
+		$cache->connect(CacheAddress, CachePort);
+		if (CacheAuth !== null) {
+			$cache->auth(CacheAuth);
+		}
+	}
+	if ($cache->ping() !== true) {
+		CloseCache();
+		LogStr('连接缓存时发生错误', -1);
+		return false;
+	}
+	return true;
+}
+function CloseCache(): bool {
+	global $cache;
+	if ($cache !== null) {
+		$cache->close();
+		$cache = null;
+	}
+	return true;
+}
 function GetNginxPID(bool $getFromFile = true): int {
 	$getMethod = ($getFromFile ? 'PID 文件' : '进程匹配');
 	if ($getFromFile) {
 		$nginxPID = (is_file(NginxPIDFile) ? file_get_contents(NginxPIDFile) : false);
 	} else {
-		$nginxPID = system('ps aux | grep nginx | grep master | awk \'{print $2}\'');
+		$nginxPIDExec = exec('ps aux | grep nginx | grep master');
+		if (stripos($nginxPIDExec, 'ps aux') !== false || ($nginxPIDExecExplode = array_values(array_filter(explode(' ', $nginxPIDExec), function ($v) { if (empty($v)) { return false; } return true; }))) === false || count($nginxPIDExecExplode) < 2) {
+			$nginxPID = false;
+		} else {
+			$nginxPID = $nginxPIDExecExplode[1];
+		}
 	}
 	if ($nginxPID === false || !is_numeric($nginxPID)) {
 		LogStr("获取 Nginx PID 失败 ({$getMethod})", -1);
@@ -99,6 +132,7 @@ if (!is_dir(LogDir) && !mkdir(LogDir)) {
 LogStr('脚本开始运行..');
 mysqli_report(MYSQLI_REPORT_OFF);
 $db = null;
+$cache = null;
 $lastHour1 = 0;
 $lastHour2 = 0;
 $lastDate1 = 0;
@@ -121,8 +155,8 @@ while (true) {
 	}
 	*/
 	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1); // 完成数统计. (每月 1 号执行)
-	$cleanRule2 = ($lastHour1 !== $curHour && $curMinute >= 50 && $curMinute <= 55); // 每小时于 45-50 分执行 1 次.
-	$cleanRule3 = ($lastHour2 !== $curHour && $curMinute >= 55 && $curMinute <= 58); // 每小时于 50-58 分执行 1 次.
+	$cleanRule2 = ($lastHour1 !== $curHour && $curMinute >= 45 && $curMinute <= 60); // 每小时执行 1 次.
+	$cleanRule3 = ($lastHour2 !== $curHour && $curMinute >= 40 && $curMinute <= 45); // 每小时执行 1 次.
 	if ($cleanRule1 || $cleanRule2 || $cleanRule3) {
 		$curTime = time();
 		$curYear = intval(date('Y'));
@@ -135,6 +169,7 @@ while (true) {
 				sleep(DBRetryWaitTime);
 				continue;
 			}
+			LogStr('开始 cleanRule-1');
 			$lastDate1 = "{$curMonth}-{$curDay}"; // 成功连接数据库后允许计时.
 			$queryTimeStart1 = microtime(true);
 			$totalCompletedQuery = $db->query("SELECT SUM(total_completed) FROM Torrents LIMIT 1");
@@ -165,14 +200,14 @@ while (true) {
 				}
 			}
 		}
-
 		if ($cleanRule2) {
+			LogStr('开始 cleanRule-2');
 			# 生成首页统计缓存.
-			if (!ConnectDB()) {
-				sleep(DBRetryWaitTime);
+			if (!ConnectCache()) {
+				sleep(CacheRetryWaitTime);
 				continue;
 			}
-			$lastHour1 = $curHour; // 成功连接数据库后允许计时.
+			$lastHour1 = $curHour; // 成功连接缓存后允许计时.
 			$queryTimeStart2_0 = microtime(true);
 			$indexOutput = '';
 			$totalSeeder = 0;
@@ -182,70 +217,75 @@ while (true) {
 			$userAgentUsageList = array();
 			$torrentList = array(0 => array(), 1 => array(), 2 => array());
 			$peerIDList = array(0 => array(), 1 => array(), 2 => array()); // 完整 Peer ID 去重, 用于统计实际用户数.
-			$basicQuerySQL = 'SELECT info_hash, peer_id, user_agent, last_type, ipv6';
-			$table1QuerySQL = "{$basicQuerySQL} FROM Peers_1";
-			$table2QuerySQL = "{$basicQuerySQL} FROM Peers_2";
-			$compareSQL = ' WHERE last_timestamp >= \'' . date('Y-m-d H:i:s', $curTime - 3600) . '\'';
-			if ($curHour === 1 || $curHour === 3 || $curHour === 5 || $curHour === 7 || $curHour === 9 || $curHour === 11) {
-				$table1QuerySQL .= $compareSQL;
-			} else {
-				$table2QuerySQL .= $compareSQL;
-			}
-			$peerResult = $db->query("({$table1QuerySQL}) UNION ALL ({$table2QuerySQL})", MYSQLI_USE_RESULT);
-			$peerCount2_0 = 0;
+			$cache->setOption(Redis::OPT_SCAN, Redis::SCAN_RETRY);
+			$peerInfoHashKeyIterator = null;
 			$queryTimeStart2_0_p = 0;
-			while ($peerRow = $peerResult->fetch_assoc()) {
-				if (empty($peerRow['last_type'])) {
-					continue;
-				}
-				$peerCount2_0++;
-				if ($peerCount2_0 >= IndexCount) {
-					$peerCount2_0 = 0;
-					$queryTimeStart2_0_p++;
-					usleep(IndexSleepTime);
-				}
-				$peerRow['last_type'] = intval($peerRow['last_type']);
-				if ($peerRow['last_type'] === 2) {
-					$totalSeeder++;
-				} else if ($peerRow['last_type'] === 1) {
-					$totalLeecher++;
-				} else {
-					continue;
-					#$totalUnknown++;
-				}
-				if (empty($peerRow['user_agent']) || strlen($peerRow['user_agent']) < 4 || stripos($peerRow['user_agent'], 'curl/') === 0 || stripos($peerRow['user_agent'], 'Mozilla/') === 0 || strlen($peerRow['user_agent']) > 50) {
-					$peerRow['user_agent'] = substr($peerRow['peer_id'], 0, 8);
-				} else {
-					$uaExplode = explode(' ', $peerRow['user_agent']);
-					foreach ($uaExplode as $ua) {
-						if (preg_match('/((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+[A-Za-z]{2,6}/', $ua) === 1) {
-							$peerRow['user_agent'] = substr($peerRow['peer_id'], 0, 8);
-							break;
+			do {
+				$peerInfoHashKeyList = $cache->scan($peerInfoHashKeyIterator, "IH:*", IndexCount);
+				if ($peerInfoHashKeyList !== false) {
+					#$peerMulti = $cache->multi();
+					foreach ($peerInfoHashKeyList as $peerInfoHashKey) {
+						if ($peerInfoHashKey === false || empty($peerInfoHashKey)) {
+							continue;
+						}
+						$peerInfoHashPart = explode(':', $peerInfoHashKey, 2);
+						$peerInfoHash = $peerInfoHashPart[1];
+						if (isset($torrentList[0][$peerInfoHash]) || isset($torrentList[1][$peerInfoHash]) || isset($torrentList[2][$peerInfoHash])) {
+							continue;
+						}
+						$cache->zRemRangeByScore($peerInfoHashKey, 0, $curTime - AnnounceMaxInterval);
+						$peerInfoHashIDList = $cache->zRange($peerInfoHashKey, 0, -1);
+						foreach ($peerInfoHashIDList as $peerInfoHashID) {
+							$peerTypeAndEvent = $cache->get("IP:{$peerInfoHash}+{$peerInfoHashID}:TE");
+							if ($peerTypeAndEvent === false) {
+								continue;
+							}
+							list($peerType, $peerEvent) = explode(':', $peerTypeAndEvent, 2);
+							$peerType = intval($peerType);
+							if ($peerType === 2) {
+								$totalSeeder++;
+							} else if ($peerType === 1) {
+								$totalLeecher++;
+							} else {
+								continue;
+							}
+							$peerUA = $cache->get("PI:UA:{$peerInfoHashID}");
+							$isIPv6 = ($cache->zCard("PI:A6:{$peerInfoHashID}") > 0 ? true : false);
+							if ($peerUA === false || strlen($peerUA) < 4 || stripos($peerUA, 'curl/') === 0 || stripos($peerUA, 'Mozilla/') === 0 || strlen($peerUA) > 50) {
+								$peerUA = substr($peerInfoHashID, 0, 8);
+							} else {
+								$uaExplode = explode(' ', $peerUA);
+								foreach ($uaExplode as $ua) {
+									if (preg_match('/((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+[A-Za-z]{2,6}/', $ua) === 1) {
+										$peerUA = substr($peerInfoHashID, 0, 8);
+										break;
+									}
+								}
+							}
+							if (!isset($userAgentUsageList[$peerUA])) {
+								$userAgentUsageList[$peerUA] = array(0 => 0, 1 => 0, 2 => 0, 'ipv6' => 0);
+							}
+							if (!isset($peerIDList[$peerType][$peerInfoHashID])) {
+								$peerIDList[$peerType][$peerInfoHashID] = 0;
+							}
+							if (!isset($torrentList[$peerType][$peerInfoHash]) || ($isIPv6 && $torrentList[$peerType][$peerInfoHash] === 0)) {
+								$torrentList[$peerType][$peerInfoHash] = ($isIPv6 ? 1 : 0);
+							}
+							if ($isIPv6) {
+								$totalIPv6++;
+								$userAgentUsageList[$peerUA]['ipv6'] += 1;
+								if ($peerIDList[$peerType][$peerInfoHashID] === 0) {
+									$peerIDList[$peerType][$peerInfoHashID] = 1;
+								}
+							}
+							$userAgentUsageList[$peerUA][$peerType] += 1;
 						}
 					}
 				}
-				if (!isset($userAgentUsageList[$peerRow['user_agent']])) {
-					$userAgentUsageList[$peerRow['user_agent']] = array(0 => 0, 1 => 0, 2 => 0, 'ipv6' => 0);
-				}
-				if (!isset($peerIDList[$peerRow['last_type']][$peerRow['peer_id']])) {
-					$peerIDList[$peerRow['last_type']][$peerRow['peer_id']] = 0;
-				}
-				$isIPv6 = (!empty($peerRow['ipv6']));
-				if (!isset($torrentList[$peerRow['last_type']][$peerRow['info_hash']]) || ($isIPv6 && $torrentList[$peerRow['last_type']][$peerRow['info_hash']] === 0)) {
-					$torrentList[$peerRow['last_type']][$peerRow['info_hash']] = ($isIPv6 ? 1 : 0);
-				}
-				if ($isIPv6) {
-					$totalIPv6++;
-					$userAgentUsageList[$peerRow['user_agent']]['ipv6'] += 1;
-					if ($peerIDList[$peerRow['last_type']][$peerRow['peer_id']] === 0) {
-						$peerIDList[$peerRow['last_type']][$peerRow['peer_id']] = 1;
-					}
-				}
-				$userAgentUsageList[$peerRow['user_agent']][$peerRow['last_type']] += 1;
-			}
-			if ($peerResult !== false) {
-				$peerResult->free();
-			}
+				$queryTimeStart2_0_p++;
+				usleep(IndexSleepTime_Scan);
+			} while ($peerInfoHashKeyIterator > 0);
+			CloseCache();
 			$queryTimeStart2_1 = microtime(true);
 			$realUser = 0;
 			$realSeeder = 0;
@@ -386,8 +426,8 @@ while (true) {
 			}
 			unset($userAgentUsageList);
 			$queryTimeStart2_3 = microtime(true);
-			file_put_contents('indexCache-MySQL.txt', $indexOutput, LOCK_EX);
-			@chmod('indexCache-MySQL.txt', 0777);
+			file_put_contents('indexCache-Redis.txt', $indexOutput, LOCK_EX);
+			@chmod('indexCache-Redis.txt', 0777);
 			$queryTimeEnd2 = microtime(true);
 			$queryTimeStart2_0_ps = $queryTimeStart2_0_p * (IndexSleepTime / 1000000);
 			$queryTimeStart2_10_ps = $queryTimeStart2_10_p * (IndexSleepTime / 1000000);
@@ -400,10 +440,7 @@ while (true) {
 		}
 
 		if ($cleanRule3) {
-			if (!ConnectDB()) {
-				sleep(DBRetryWaitTime);
-				continue;
-			}
+			LogStr('开始 cleanRule-3');
 			$lastHour2 = $curHour; // 成功连接数据库后允许计时.
 			# 清理 Nginx 日志和数据库.
 			//if (($curNginxTimestampDone + 3600) < microtime(true)) {
@@ -416,14 +453,6 @@ while (true) {
 			}
 			LogStr('清理 Nginx 日志成功, 本次花费时间: ' . round(microtime(true) - $curNginxTimestampDone, 3) . ' 秒');
 			CleanNginx(true);
-			//}
-			//if ($curHour === 1 || $curHour === 3 || $curHour === 5 || $curHour === 7 || $curHour === 9 || $curHour === 11) {
-			$cleanTimeStart2 = microtime(true);
-			$oldDBName = 'Peers_' . (($curHour === 1 || $curHour === 3 || $curHour === 5 || $curHour === 7 || $curHour === 9 || $curHour === 11) ? '1' : '2'); // 和 Announce 的 curDBName 相反.
-			if ($db->query("TRUNCATE TABLE {$oldDBName}") !== false) {
-				LogStr("清理 MySQL {$oldDBName} 表成功, 本次花费时间: " . round(microtime(true) - $cleanTimeStart2, 3) . ' 秒');
-			}
-			//}
 		}
 		CloseDB();
 	}

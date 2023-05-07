@@ -116,6 +116,7 @@ if ($clientInfoHash !== '457b1b9f117d95cf7982b6deb6c5fdd14f3f0180') {
 */
 $clientLeft = $_GET['left'] ?? null;
 $clientType = 0;
+$clientStoppedOrPaused = (in_array($clientEvent, array('stopped', 'paused')));
 if ($clientLeft !== null) {
 	$clientType = (intval($clientLeft) === 0) ? 2 : 1;
 }
@@ -132,6 +133,18 @@ if ($clientUserAgent !== null && stripos($clientUserAgent, 'bitcomet') !== false
 }
 $db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
 if ($db->connect_errno > 0) {
+	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+}
+$cache = new Redis();
+if (CachePersistence) {
+	$cache->pconnect(CacheAddress, CachePort);
+} else {
+	$cache->connect(CacheAddress, CachePort);
+}
+if (CacheAuth !== null) {
+	$cache->auth(CacheAuth);
+}
+if ($cache->ping() !== true) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
 }
 $debugLevel = 0;
@@ -151,19 +164,15 @@ if (isset($_GET['debug'])) {
 	$premiumUser = true;
 }
 $curTime = time();
-#$db->set_charset('utf8mb4');
-#$db->query('SET NAMES utf8mb4 COLLATE utf8mb4_general_ci');
-#$db->query('DELETE FROM Peers WHERE last_timestamp < DATE_SUB(NOW(), INTERVAL 12 HOUR) LIMIT 500');
-$escapedClientInfoHash = $db->escape_string($clientInfoHash);
-$escapedClientPeerID = $db->escape_string($clientPeerID);
 $resBencodeArr = array('interval' => AnnounceInterval, 'min interval' => AnnounceMinInterval, 'complete' => 0, 'incomplete' => 0, 'downloaded' => 0, 'peers' => array());
 $clientCompact = (isset($_GET['compact']) && intval($_GET['compact']) === 1) ? true : false;
 if ($clientCompact) {
 	$resBencodeArr['peers'] = '';
 	$resBencodeArr['peers6'] = '';
 }
+$escapedClientInfoHash = $db->escape_string($clientInfoHash);
 if ($premiumUser) {
-	if ($curSimpleTrackerKey !== null && ($clientEvent === '' || !in_array(strtolower($clientEvent), array('stopped', 'paused'))) && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
+	if ($curSimpleTrackerKey !== null && !$clientStoppedOrPaused && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
 		if (strlen($_GET['m']) > 48) {
 			die(GenerateBencode(array('failure reason' => ErrorMessage[9])));
 		}
@@ -184,6 +193,7 @@ if ($clientMessageListQuery !== false && ($clientMessageListResult = $clientMess
 	$clientMessageList = "其它客户端传递的信息: {$clientMessageListResult[0]}";
 	$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $clientMessageList : "{$clientMessageList} | {$resBencodeArr['warning message']}");
 }
+$clientAnnounceExpirationTime = $cache->ttl("IP:{$clientInfoHash}+{$clientPeerID}:TE");
 if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== false || stripos($clientUserAgent, 'bitcomet') !== false)) || stripos($clientPeerID, '-QB') === 0 || stripos($clientPeerID, '-BC') === 0) {
 	$noWarnClient = true;
 	if (stripos($clientPeerID, '-QB') === 0) {
@@ -213,13 +223,9 @@ if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== 
 		$noWarnClient = false;
 	}
 	if ($noWarnClient) {
-		$intervalCompareDate = date('Y-m-d H:i', ($curTime - ($resBencodeArr['interval'] * 2))) . ':00';
-		$noWarnClientMinIntervalCompareDate = date('Y-m-d H:i:s', ($curTime + ceil($resBencodeArr['interval'] * 2 / 10) - ceil($resBencodeArr['interval'] * 2 / 3)));
-		$noWarnClientAnnounceIntervalCheck = $db->query("(SELECT 1 FROM Peers_1 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_timestamp > '{$intervalCompareDate}' AND last_timestamp < '{$noWarnClientMinIntervalCompareDate}' LIMIT 1) UNION ALL (SELECT 1 FROM Peers_2 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_timestamp > '{$intervalCompareDate}' AND last_timestamp < '{$noWarnClientMinIntervalCompareDate}' LIMIT 1) LIMIT 1");
-		if ($noWarnClientAnnounceIntervalCheck->num_rows > 0) {
+		if ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < $resBencodeArr['interval'] / 2 + 10) {
 			die(GenerateBencode(array('failure reason' => (isset($resBencodeArr['warning message']) ? $resBencodeArr['warning message'] : ServerMessage))));
 		}
-		$noWarnClientAnnounceIntervalCheck->close();
 		//$resBencodeArr['interval'] = intval(ceil($resBencodeArr['interval'] / 2));
 		$resBencodeArr['min interval'] = $resBencodeArr['interval'];
 	} else if (isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) && $mainClientVersion !== false && $sub1ClientVersion !== false && $sub2ClientVersion !== false && ($mainClientVersion === 4 && $sub1ClientVersion === 5 && $sub2ClientVersion < 2)) {
@@ -236,65 +242,59 @@ if ($clientNumwant < 1 || $clientNumwant > 1000) {
 	$clientNumwant = 50;
 }
 $clientNoPeerID = (isset($_GET['no_peer_id']) && intval($_GET['no_peer_id']) === 1) ? true : false;
-$basicPeerQuerySQL = 'SELECT peer_id, last_timestamp, last_type, ipv4, ipv6, port';
-$table1PeerQuerySQL = "{$basicPeerQuerySQL} FROM Peers_1 WHERE info_hash = ? AND peer_id != ? AND last_event != 'stopped' AND last_event != 'paused'";
-$table2PeerQuerySQL = "{$basicPeerQuerySQL} FROM Peers_2 WHERE info_hash = ? AND peer_id != ? AND last_event != 'stopped' AND last_event != 'paused'";
-$compareSQL = ' AND last_timestamp >= \'' . date('Y-m-d H:i', ($curTime - AnnounceMaxInterval)) . ':00\'';
-if (OldDBName === 'Peers_1') {
-	$table1PeerQuerySQL .= $compareSQL;
-} else {
-	$table2PeerQuerySQL .= $compareSQL;
-}
-if ($clientEvent === '' || in_array(strtolower($clientEvent), array('started', 'completed', 'update'))) {
-	$peerQuerySTMT = $db->prepare("({$table1PeerQuerySQL} ORDER BY last_timestamp DESC LIMIT ?) UNION ALL ({$table2PeerQuerySQL} ORDER BY last_timestamp DESC LIMIT ?) ORDER BY last_timestamp DESC LIMIT ?");
-	$peerQuerySTMT->bind_param('ssissii', $clientInfoHash, $clientPeerID, $clientNumwant, $clientInfoHash, $clientPeerID, $clientNumwant, $clientNumwant);
-	$peerQuerySTMT->bind_result($peerID, $peerLastTimestamp, $peerType, $peerIPv4Str, $peerIPv6Str, $peerPort);
-	$peerQuerySTMT->execute();
-	while ($peerQuerySTMT->fetch()) {
+if (!$clientStoppedOrPaused) {
+	$curNum = 0;
+	// 使用 zset 类型替换, 以加入时间戳, 并通过时间戳淘汰一些未知原因导致停止没有回报而没有清除的客户端, 并放入 autoclean 进行垃圾回收.
+	// 使用 zrevrangebyscore 方法替换, 以返回最新的 peer 并进行 numwant 限制同时防止请求卡在单点上.
+	$infoHashPeerIDSet = $cache->zRevRangeByScore("IH:{$clientInfoHash}", '+inf', 0, ['limit' => [0, $clientNumwant]]);
+	foreach ($infoHashPeerIDSet as $peerID) {
 		if (empty($peerID)) {
 			continue;
 		}
+		$peerTypeAndEvent = $cache->get("IP:{$clientInfoHash}+{$peerID}:TE");
+		if ($peerTypeAndEvent === false) {
+			continue;
+		}
+		list($peerType, $peerEvent) = explode(':', $peerTypeAndEvent, 2);
+		$peerType = intval($peerType);
 		if ($peerType === 2) {
 			$torrentSeeder++;
 		} else if ($peerType === 1) {
 			$torrentLeecher++;
 		}
-		if ($peerPort !== 0 && $peerPort !== 1) {
-			if (!empty($peerIPv4Str)) {
-				$peerIPv4List = explode(',', $peerIPv4Str);
-				foreach ($peerIPv4List as $peerIPv4) {
-					if ($clientCompact) {
-						$resBencodeArr['peers'] .= inet_pton($peerIPv4) . pack('n', $peerPort);
-						continue;
-					}
-					$tArr = array();
-					if (!$clientNoPeerID) {
-						$tArr['peer_id'] = $peerID;
-					}
-					$tArr['ip'] = $peerIPv4;
-					$tArr['port'] = $peerPort;
-					$resBencodeArr['peers'][] = $tArr;
-				}
+		$peerIPListArr = array(4 => array(), 6 => array());
+		$peerIPv4Set = $cache->zRevRangeByScore("PI:A4:{$peerID}", '+inf', 0, ['limit' => [0, 4]]);
+		$peerIPv6Set = $cache->zRevRangeByScore("PI:A6:{$peerID}", '+inf', 0, ['limit' => [0, 4]]);
+		foreach ($peerIPv4Set as $peerFullIPv4) {
+			list($peerIPv4, $peerPort) = explode(':', $peerFullIPv4, 2);
+			$peerPort = intval($peerPort);
+			if ($peerPort === 0 || $peerPort === 1) {
+				continue;
 			}
-			if (!empty($peerIPv6Str)) {
-				$peerIPv6List = explode(',', $peerIPv6Str);
-				foreach ($peerIPv6List as $peerIPv6) {
-					if ($clientCompact) {
-						$resBencodeArr['peers6'] .= inet_pton($peerIPv6) . pack('n', $peerPort);
-						continue;
-					}
-					$tArr = array();
+			$peerIPListArr[4][] = array('ip' => $peerIPv4, 'port' => $peerPort);
+		}
+		foreach ($peerIPv6Set as $peerFullIPv6) {
+			$peerIPv6Arr = explode(':', $peerFullIPv6);
+			$peerPort = intval($peerIPv6Arr[count($peerIPv6Arr) - 1]);
+			if ($peerPort === 0 || $peerPort === 1) {
+				continue;
+			}
+			$peerIPv6 = str_replace(":{$peerPort}", '', $peerFullIPv6);
+			$peerIPListArr[6][] = array('ip' => $peerIPv6, 'port' => $peerPort);
+		}
+		foreach ($peerIPListArr as $peerIPType => $peerIPList) {
+			foreach ($peerIPList as $peerIP) {
+				if ($clientCompact) {
+					$resBencodeArr[($peerIPType === 4 ? 'peers' : 'peers6')] .= inet_pton($peerIP['ip']) . pack('n', $peerIP['port']);
+				} else {
 					if (!$clientNoPeerID) {
-						$tArr['peer_id'] = $peerID;
+						$peerIP['peer_id'] = $peerID;
 					}
-					$tArr['ip'] = $peerIPv6;
-					$tArr['port'] = $peerPort;
-					$resBencodeArr['peers'][] = $tArr;
+					$resBencodeArr['peers'][] = $peerIP;
 				}
 			}
 		}
 	}
-	$peerQuerySTMT->close();
 }
 if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
 	$clientIP = $_SERVER['HTTP_CF_CONNECTING_IP'];
@@ -312,6 +312,7 @@ if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
 } else {
 	$clientIP = $_SERVER['REMOTE_ADDR'];
 }
+$clientIP = strtolower($clientIP);
 /*
 $clientIPList = $_GET['ip'] ?? null;
 $clientIPv4List = $_GET['ipv4'] ?? null;
@@ -360,45 +361,52 @@ $resBencodeArr['complete'] = $torrentSeeder;
 $resBencodeArr['incomplete'] = $torrentLeecher;
 $resBencodeArr['downloaded'] = $torrentDownloaded;
 if ($clientType !== 0) {
-	$minIntervalCompareDate = date('Y-m-d H:i:s', ($curTime - $resBencodeArr['min interval'] + ceil($resBencodeArr['min interval'] / 10)));
-	$clientReannounceQuery = $db->query("(SELECT ipv4, ipv6 FROM Peers_1 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_event = '{$clientEvent}' AND last_type = {$clientType} AND last_timestamp > '{$minIntervalCompareDate}' LIMIT 1) UNION ALL (SELECT ipv4, ipv6 FROM Peers_2 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_event = '{$clientEvent}' AND last_type = {$clientType} AND last_timestamp > '{$minIntervalCompareDate}' LIMIT 1) LIMIT 1");
-	$clientIsReannounced = ($clientReannounceQuery->num_rows > 0);
-	if ($clientIsReannounced && ($clientReannounceResult = $clientReannounceQuery->fetch_row()) !== false && $clientReannounceResult !== null) {
-		if (!empty($clientReannounceResult[0])) {
-			$clientReannounceIPv4List = explode(',', $clientReannounceResult[0]);
-			$validClientIPList['ipv4'] = isset($validClientIPList['ipv4']) ? array_unique(array_merge($validClientIPList['ipv4'], $clientReannounceIPv4List)) : $clientReannounceIPv4List;
+	$cache->zRemRangeByScore("PI:A4:{$clientPeerID}", 0, $curTime - AnnounceMaxInterval);
+	$cache->zRemRangeByScore("PI:A6:{$clientPeerID}", 0, $curTime - AnnounceMaxInterval);
+	if ($clientStoppedOrPaused) {
+		$cache->zRem("IH:{$clientInfoHash}", $clientPeerID);
+		$cache->unlink("IP:{$clientInfoHash}+{$clientPeerID}:TE");
+	} else {
+		$clientIsReannounced = ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < ($resBencodeArr['min interval'] / 8)) ? true : false;
+		// 出于 IPv4/IPv6 多重回报, 目前不阻止 (也没必要阻止) 重复回报更新 Peer 记录.
+		$multiQuery = $cache->multi();
+		$multiQuery->zAdd("IH:{$clientInfoHash}", $curTime, $clientPeerID);
+		#$multiQuery->expire("IH:{$clientInfoHash}", AnnounceMaxInterval); // 若客户端不正常结束但种子较为热门, 则部分客户端不会过期, 应于 autoclean 实现.
+		$multiQuery->setEx("IP:{$clientInfoHash}+{$clientPeerID}:TE", AnnounceMaxInterval, "{$clientType}:{$clientEvent}");
+		if ($clientUserAgent !== null) {
+			$multiQuery->setEx("PI:UA:{$clientPeerID}", AnnounceMaxInterval, $clientUserAgent);
 		}
-		if (!empty($clientReannounceResult[1])) {
-			$clientReannounceIPv6List = explode(',', $clientReannounceResult[1]);
-			$validClientIPList['ipv6'] = isset($validClientIPList['ipv6']) ? array_unique(array_merge($validClientIPList['ipv6'], $clientReannounceIPv6List)) : $clientReannounceIPv6List;
+		if (isset($validClientIPList['ipv4'])) {
+			foreach ($validClientIPList['ipv4'] as $validClientIPv4) {
+				$multiQuery->zAdd("PI:A4:{$clientPeerID}", $curTime, "{$validClientIPv4}:{$clientPort}");
+			}
+			$multiQuery->expire("PI:A4:{$clientPeerID}", AnnounceMaxInterval);
 		}
-	}
-	// 出于 IPv4/IPv6 多重回报, 目前不阻止重复回报更新 Peer 记录.
-	$clientIPv4String = isset($validClientIPList['ipv4']) ? implode(',', $validClientIPList['ipv4']) : null;
-	$clientIPv6String = isset($validClientIPList['ipv6']) ? implode(',', $validClientIPList['ipv6']) : null;
-	if (strlen($clientIPv4String) > 70 || strlen($clientIPv6String) > 560) {
-		$clientIPv4String = (isset($clientReannounceIPv4List) ? implode(',', $clientReannounceIPv4List) : null);
-		$clientIPv6String = (isset($clientReannounceIPv6List) ? implode(',', $clientReannounceIPv6List) : null);
-	}
-	$db->query("DELETE FROM " . OldDBName . " WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' LIMIT 1");
-	$peerInsertSTMT = $db->prepare("INSERT INTO " . CurDBName . " (info_hash, peer_id, user_agent, last_event, last_type, ipv4, ipv6, port) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE user_agent = VALUES(user_agent), last_event = VALUES(last_event), last_type = VALUES(last_type), ipv4 = IFNULL(VALUES(ipv4), ipv4), ipv6 = IFNULL(VALUES(ipv6), ipv6), port = VALUES(port)");
-	$peerInsertSTMT->bind_param('ssssissi', $clientInfoHash, $clientPeerID, $clientUserAgent, $clientEvent, $clientType, $clientIPv4String, $clientIPv6String, $clientPort);
-	$peerInsertSTMT->execute();
-	$peerInsertSTMT->close();
-	if (!$clientIsReannounced && $clientEvent === 'completed') {
-		#$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed, total_uploaded, total_downloaded) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed), total_uploaded = total_uploaded + VALUES(total_uploaded), total_downloaded = total_downloaded + VALUES(total_downloaded)");
-		/*
-		$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed) VALUES (?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
-		#$torrentSTMT->bind_param('siii', $clientInfoHash, $newCompleted, $clientUploaded, $clientDownloaded);
-		$torrentSTMT->bind_param('si', $clientInfoHash, $newCompleted);
-		$torrentSTMT->execute();
-		$torrentSTMT->close();
-		*/
-		#$newCompleted = ($clientEvent === 'completed' ? 1 : 0);
-		$torrentQuery = $db->query("INSERT INTO Torrents (info_hash, total_completed) VALUES ('{$escapedClientInfoHash}', 1) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
+		if (isset($validClientIPList['ipv6'])) {
+			foreach ($validClientIPList['ipv6'] as $validClientIPv6) {
+				$multiQuery->zAdd("PI:A6:{$clientPeerID}", $curTime, "{$validClientIPv6}:{$clientPort}");
+			}
+			$multiQuery->expire("PI:A6:{$clientPeerID}", AnnounceMaxInterval);
+		}
+		$multiQuery->exec();
+		if (!$clientIsReannounced && $clientEvent === 'completed') {
+			#$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed, total_uploaded, total_downloaded) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed), total_uploaded = total_uploaded + VALUES(total_uploaded), total_downloaded = total_downloaded + VALUES(total_downloaded)");
+			/*
+			$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed) VALUES (?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
+			#$torrentSTMT->bind_param('siii', $clientInfoHash, $newCompleted, $clientUploaded, $clientDownloaded);
+			$torrentSTMT->bind_param('si', $clientInfoHash, $newCompleted);
+			$torrentSTMT->execute();
+			$torrentSTMT->close();
+			*/
+			#$newCompleted = ($clientEvent === 'completed' ? 1 : 0);
+			$torrentQuery = $db->query("INSERT INTO Torrents (info_hash, total_completed) VALUES ('{$escapedClientInfoHash}', 1) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
+		}
 	}
 }
 $db->close();
+if (!CachePersistence) {
+	$cache->close();
+}
 /*
 我们不想知道这些东西.
 $key = $_GET['key'] ?? null;

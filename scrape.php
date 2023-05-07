@@ -9,8 +9,9 @@ if (isset($_SERVER['QUERY_STRING'])) {
 	$clientInfoHashList = array_map(function ($v) { $v = strtolower(bin2hex($v)); if (strlen($v) !== 40) { die(GenerateBencode(array('failure reason' => ErrorMessage[3]))); } return $v; }, $rawInfoHashList);
 }
 $premiumUser = false;
+$clientNumwant = 50;
 /*
-全部列出的资源消耗需要优化 (输出结果需要进行缓存).
+全部列出的资源消耗需要优化 (输出结果需要进行缓存, 最好在 autoclean 进行).
 if (!isset($rawInfoHashList) && isset($_GET['k'])) {
 	if ($_GET['k'] === 'ak-Debug' || (strpos($_GET['k'], 'uk-') === 0 && strpos($_GET['k'], '.') === false && is_file("UserKey-SimpleTracker/{$_GET['p']}"))) {
 		$premiumUser = true;
@@ -30,6 +31,18 @@ if (!$premiumUser) {
 }
 $db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
 if ($db->connect_errno > 0) {
+	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+}
+$cache = new Redis();
+if (CachePersistence) {
+	$cache->pconnect(CacheAddress, CachePort);
+} else {
+	$cache->connect(CacheAddress, CachePort);
+}
+if (CacheAuth !== null) {
+	$cache->auth(CacheAuth);
+}
+if ($cache->ping() !== true) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
 }
 $resBencodeArr = array('files' => array(), 'flags' => array('min_request_interval' => ScrapeMinInterval));
@@ -52,24 +65,29 @@ if ($premiumUser) {
 	} else {
 		$table2TimestampWhereSQL = $compareSQL;
 	}
-	foreach ($clientInfoHashList as $value) {
-		$escapeValue = $db->escape_string($value);
+	foreach ($clientInfoHashList as $clientInfoHash) {
+		$torrentSeeder = 0;
+		$torrentLeecher = 0;
+		$clientInfoHashPeerIDList = $cache->zRevRangeByScore("IH:{$clientInfoHash}", '+inf', 0, ['limit' => [0, $clientNumwant]]);
+		foreach ($clientInfoHashPeerIDList as $clientInfoHashPeerID) {
+			if (empty($clientInfoHashPeerID)) {
+				continue;
+			}
+			$clientInfoHashPeerTypeAndEvent = $cache->get("IP:{$clientInfoHash}+{$clientInfoHashPeerID}:TE");
+			if ($clientInfoHashPeerTypeAndEvent === false) {
+				continue;
+			}
+			$clientInfoHashPeerType = explode(':', $clientInfoHashPeerTypeAndEvent, 2)[0];
+			$clientInfoHashPeerType = intval($clientInfoHashPeerType);
+			if ($clientInfoHashPeerType === 2) {
+				$torrentSeeder++;
+			} else if ($clientInfoHashPeerType === 1) {
+				$torrentLeecher++;
+			}
+		}
+		$escapeValue = $db->escape_string($clientInfoHash);
 		$queryWhereSQL .= "info_hash = '{$escapeValue}' OR ";
-		$torrentSeeder = $db->query("SELECT SUM(count_seeder) FROM ((SELECT COUNT(1) as count_seeder FROM Peers_1 WHERE last_type = 2 AND last_event != 'stopped' AND last_event != 'paused' AND info_hash = '{$escapeValue}' {$table1TimestampWhereSQL}) UNION ALL (SELECT COUNT(1) as count_seeder FROM Peers_2 WHERE last_type = 2 AND last_event != 'stopped' AND last_event != 'paused' AND info_hash = '{$escapeValue}' {$table2TimestampWhereSQL})) as total_seeder");
-		if ($torrentSeeder === false) {
-			$torrentSeeder = 0;
-		} else {
-			$torrentSeederRow = $torrentSeeder->fetch_row();
-			$torrentSeeder = ($torrentSeederRow !== false && $torrentSeederRow !== null) ? intval($torrentSeederRow[0]) : 0;
-		}
-		$torrentLeecher = $db->query("SELECT SUM(count_leecher) FROM ((SELECT COUNT(1) as count_leecher FROM Peers_1 WHERE last_type = 1 AND last_event != 'stopped' AND last_event != 'paused' AND info_hash = '{$escapeValue}' {$table1TimestampWhereSQL}) UNION ALL (SELECT COUNT(1) as count_leecher FROM Peers_2 WHERE last_type = 1 AND last_event != 'stopped' AND last_event != 'paused' AND info_hash = '{$escapeValue}' {$table2TimestampWhereSQL})) as total_leecher");
-		if ($torrentLeecher === false) {
-			$torrentLeecher = 0;
-		} else {
-			$torrentLeecherRow = $torrentLeecher->fetch_row();
-			$torrentLeecher = ($torrentLeecherRow !== false && $torrentLeecherRow !== null) ? intval($torrentLeecherRow[0]) : 0;
-		}
-		$filesArr[hex2bin($value)] = array('complete' => $torrentSeeder, 'incomplete' => $torrentLeecher, 'downloaded' => 0);
+		$filesArr[hex2bin($clientInfoHash)] = array('complete' => $torrentSeeder, 'incomplete' => $torrentLeecher, 'downloaded' => 0);
 	}
 	$queryWhereSQL = substr($queryWhereSQL, 0, -4) . ' LIMIT ' . count($clientInfoHashList);
 	$torrentTotalCompletedList = $db->query("SELECT info_hash, total_completed FROM Torrents {$queryWhereSQL}");
@@ -81,6 +99,9 @@ if ($premiumUser) {
 	}
 }
 $db->close();
+if (!CachePersistence) {
+	$cache->close();
+}
 $resBencodeArr['files'] = $filesArr;
 echo GenerateBencode($resBencodeArr);
 ?>

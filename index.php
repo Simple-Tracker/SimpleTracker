@@ -4,7 +4,6 @@ if (isset($_GET['info_hash']) || isset($_GET['peer_id']) || isset($_GET['event']
 	header('Content-Type: text/plain; charset=utf-8');
 	die(GenerateBencode(array('failure reason' => '服务器认为 Tracker 地址有误. (EC: 5)')));
 }
-ini_set('memory_limit', '1024M');
 define('BotUAKeywords', array('bot', 'crawl', 'spider' ,'slurp', 'sohu-search', 'lycos', 'robozilla'));
 function IsRobot() {
 	if (!isset($_SERVER['HTTP_USER_AGENT']) || empty($_SERVER['HTTP_USER_AGENT'])) {
@@ -25,7 +24,7 @@ function OutputHTMLEnd(string $str) {
 }
 header('Content-Type: text/html; charset=utf-8');
 echo "<!DOCTYPE html>\n<html>\n	<head>\n		<meta charset=\"utf-8\">\n		<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n		<link rel=\"stylesheet\" href=\"dark.css\">\n		<link rel=\"shortcut icon\" href=\"favicon.ico\" type=\"image/x-icon\">\n		<title>Tracker 状态信息 - Simple Tracker</title>\n	</head>\n	<body>\n		<pre>";
-echo "Simple Tracker [Version: 2023-04-26]\n";
+echo "Simple Tracker [Version: 2023-08-07]\n";
 echo "服务器 Telegram 频道: https://t.me/SimpleTracker\n";
 echo "服务器 Telegram 群组 (反馈与交流 BitTorrent 相关内容): https://t.me/SimpleTrackerGroup\n";
 echo "服务器 Tracker URL: https://t1.hloli.org/announce\n";
@@ -51,6 +50,6 @@ if ($cacheMode && (IsRobot() || !$cacheExpired)) {
 	die();
 }
 */
-$cacheContent = file_get_contents('indexCache-MySQL.txt');
+$cacheContent = @file_get_contents('indexCache-Redis.txt');
 OutputHTMLEnd((!empty($cacheContent) ? $cacheContent : "当前缓存出现故障. :(\n"));
 ?>
