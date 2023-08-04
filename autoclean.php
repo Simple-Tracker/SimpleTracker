@@ -43,6 +43,10 @@ function ConnectDB(): bool {
 	if ($db === null) {
 		$db = @new MySQLi(DBAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
 	}
+	if (!isset($db->connect_errno) || !is_int($db->connect_errno)) {
+		LogStr('连接数据库时发生错误, 错误代码: 未知', -1);
+		return false;
+	}
 	if ($db->connect_errno > 0) {
 		CloseDB();
 		LogStr('连接数据库时发生错误, 错误代码: ' . $db->connect_errno, -1);
