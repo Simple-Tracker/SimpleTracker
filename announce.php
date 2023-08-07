@@ -135,15 +135,13 @@ $db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
 if ($db->connect_errno > 0) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
 }
-$cache = new Redis();
-if (CachePersistence) {
-	$cache->pconnect(CacheAddress, CachePort);
-} else {
-	$cache->connect(CacheAddress, CachePort);
-}
-if (CacheAuth !== null) {
-	$cache->auth(CacheAuth);
-}
+$cache = new Redis(array(
+	'host' => CacheAddress,
+	'port' => CachePort,
+	'persistent' => CachePersistence,
+	'auth' => CacheAuth,
+	'connectTimeout' => CacheTimeout
+));
 if ($cache->ping() !== true) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
 }

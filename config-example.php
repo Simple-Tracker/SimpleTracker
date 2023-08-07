@@ -24,6 +24,7 @@ define('CacheAddress', '/var/run/redis/redis.sock');
 define('CachePort', 0);
 define('CachePersistence', true);
 define('CacheAuth', null); // auth or null.
+define('CacheTimeout', 16); // Second.
 define('CacheRetryWaitTime', 10);
 
 // Key Config
@@ -64,6 +65,7 @@ define('IndexSleepTime_Scan', 1000000); // Microsecond, 1 Second = 1000000 Micro
 define('IndexCount', 10000);
 define('NginxPIDFile', '/var/run/nginx.pid'); // Letters or numbers only.
 define('NginxAccessLogFile', '/var/log/nginx/access.log'); // Letters or numbers only.
+define('CacheTimeout_Autoclean', 900); // Second.
 
 // Announce Config
 define('AnnounceInterval', 1200);

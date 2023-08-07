@@ -65,11 +65,12 @@ function CloseDB(): bool {
 function ConnectCache(): bool {
 	global $cache;
 	if ($cache === null) {
-		$cache = new Redis();
-		$cache->connect(CacheAddress, CachePort);
-		if (CacheAuth !== null) {
-			$cache->auth(CacheAuth);
-		}
+		$cache = new Redis(array(
+			'host' => CacheAddress,
+			'port' => CachePort,
+			'auth' => CacheAuth,
+			'connectTimeout' => CacheTimeout_Autoclean
+		));
 	}
 	if ($cache->ping() !== true) {
 		CloseCache();
@@ -156,7 +157,8 @@ while (true) {
 	}
 	*/
 	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1); // 完成数统计. (每月 1 号执行)
-	$cleanRule21 = ($lastHour21 !== $curHour && $curMinute >= 15 && $curMinute <= 30); // 每小时执行 1 次.
+	#$cleanRule21 = ($lastHour21 !== $curHour && $curMinute >= 15 && $curMinute <= 30); // 每小时执行 1 次.
+	$cleanRule21 = false;
 	$cleanRule22 = ($lastHour22 !== $curHour && $curMinute >= 45 && $curMinute <= 60); // 每小时执行 1 次.
 	$cleanRule3 = ($lastHour3 !== $curHour && $curMinute >= 40 && $curMinute <= 45); // 每小时执行 1 次.
 	if ($cleanRule1 || $cleanRule21 || $cleanRule22 || $cleanRule3) {
