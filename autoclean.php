@@ -65,12 +65,11 @@ function CloseDB(): bool {
 function ConnectCache(): bool {
 	global $cache;
 	if ($cache === null) {
-		$cache = new Redis(array(
-			'host' => CacheAddress,
-			'port' => CachePort,
-			'auth' => CacheAuth,
-			'connectTimeout' => CacheTimeout_Autoclean
-		));
+		$cache = new Redis();
+		$cache->connect(CacheAddress, CachePort, CacheTimeout_Autoclean);
+		if (CacheAuth !== null) {
+			$cache->auth(CacheAuth);
+		}
 	}
 	if ($cache->ping() !== true) {
 		CloseCache();
