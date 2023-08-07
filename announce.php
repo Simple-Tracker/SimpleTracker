@@ -361,15 +361,13 @@ $resBencodeArr['complete'] = $torrentSeeder;
 $resBencodeArr['incomplete'] = $torrentLeecher;
 $resBencodeArr['downloaded'] = $torrentDownloaded;
 if ($clientType !== 0) {
-	$cache->zRemRangeByScore("PI:A4:{$clientPeerID}", 0, $curTime - AnnounceMaxInterval);
-	$cache->zRemRangeByScore("PI:A6:{$clientPeerID}", 0, $curTime - AnnounceMaxInterval);
 	if ($clientStoppedOrPaused) {
 		$cache->zRem("IH:{$clientInfoHash}", $clientPeerID);
 		$cache->unlink("IP:{$clientInfoHash}+{$clientPeerID}:TE");
 	} else {
 		$clientIsReannounced = ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < ($resBencodeArr['min interval'] / 8)) ? true : false;
 		// 出于 IPv4/IPv6 多重回报, 目前不阻止 (也没必要阻止) 重复回报更新 Peer 记录.
-		$multiQuery = $cache->multi();
+		$multiQuery = $cache->multi(Redis::PIPELINE);
 		$multiQuery->zAdd("IH:{$clientInfoHash}", $curTime, $clientPeerID);
 		#$multiQuery->expire("IH:{$clientInfoHash}", AnnounceMaxInterval); // 若客户端不正常结束但种子较为热门, 则部分客户端不会过期, 应于 autoclean 实现.
 		$multiQuery->setEx("IP:{$clientInfoHash}+{$clientPeerID}:TE", AnnounceMaxInterval, "{$clientType}:{$clientEvent}");
@@ -377,12 +375,14 @@ if ($clientType !== 0) {
 			$multiQuery->setEx("PI:UA:{$clientPeerID}", AnnounceMaxInterval, $clientUserAgent);
 		}
 		if (isset($validClientIPList['ipv4'])) {
+			$multiQuery->zRemRangeByScore("PI:A4:{$clientPeerID}", 0, $curTime - AnnounceMaxInterval);
 			foreach ($validClientIPList['ipv4'] as $validClientIPv4) {
 				$multiQuery->zAdd("PI:A4:{$clientPeerID}", $curTime, "{$validClientIPv4}:{$clientPort}");
 			}
 			$multiQuery->expire("PI:A4:{$clientPeerID}", AnnounceMaxInterval);
 		}
 		if (isset($validClientIPList['ipv6'])) {
+			$multiQuery->zRemRangeByScore("PI:A6:{$clientPeerID}", 0, $curTime - AnnounceMaxInterval);
 			foreach ($validClientIPList['ipv6'] as $validClientIPv6) {
 				$multiQuery->zAdd("PI:A6:{$clientPeerID}", $curTime, "{$validClientIPv6}:{$clientPort}");
 			}

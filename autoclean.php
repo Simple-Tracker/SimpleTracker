@@ -133,17 +133,18 @@ LogStr('脚本开始运行..');
 mysqli_report(MYSQLI_REPORT_OFF);
 $db = null;
 $cache = null;
-$lastHour1 = 0;
-$lastHour2 = 0;
-$lastDate1 = 0;
-$lastDate2 = 0;
+$lastHour21 = 0;
+$lastHour22 = 0;
+$lastHour3 = 0;
+$lastDate1 = null;
+#$lastDate2 = null;
 $lastCleanTime = 0;
-//$curNginxTimestampDone = 0;
+#$curNginxTimestampDone = 0;
 while (true) {
 	$curMonth = intval(date('n'));
 	$curDay = intval(date('j'));
 	$curHour = intval(date('h'));
-	//$curHour2 = intval(date('H'));
+	#$curHour2 = intval(date('H'));
 	$curMinute = intval(date('i'));
 	/*
 	if ($lastDate2 !== "{$curDay}-{$curHour2}" && $curHour2 === 8) {
@@ -155,9 +156,10 @@ while (true) {
 	}
 	*/
 	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1); // 完成数统计. (每月 1 号执行)
-	$cleanRule2 = ($lastHour1 !== $curHour && $curMinute >= 45 && $curMinute <= 60); // 每小时执行 1 次.
-	$cleanRule3 = ($lastHour2 !== $curHour && $curMinute >= 40 && $curMinute <= 45); // 每小时执行 1 次.
-	if ($cleanRule1 || $cleanRule2 || $cleanRule3) {
+	$cleanRule21 = ($lastHour21 !== $curHour && $curMinute >= 15 && $curMinute <= 30); // 每小时执行 1 次.
+	$cleanRule22 = ($lastHour22 !== $curHour && $curMinute >= 45 && $curMinute <= 60); // 每小时执行 1 次.
+	$cleanRule3 = ($lastHour3 !== $curHour && $curMinute >= 40 && $curMinute <= 45); // 每小时执行 1 次.
+	if ($cleanRule1 || $cleanRule21 || $cleanRule22 || $cleanRule3) {
 		$curTime = time();
 		$curYear = intval(date('Y'));
 		if (!ConnectDB()) {
@@ -190,7 +192,7 @@ while (true) {
 				$endDate = date('Y-m-d', strtotime('-1 day'));
 				$popularTorrentMessage = "服务器 Tracker 已统计完成数记录 ({$startDate} 至 {$endDate}), 本次花费时间: " . round(microtime(true) - $queryTimeStart1, 3) . " 秒, 并将进行自动清理.\n本月共计完成数: {$totalCompleted}.\n\n{$popularTorrentMessage}";
 				if (($sendMessageRetCode = SendMessage($popularTorrentMessage)) === false) {
-					$lastDate1 = 0;
+					$lastDate1 = null;
 					LogStr('发送消息失败, 将不清理 MySQL Torrents 表 (返回值: ' . var_export($sendMessageRetCode, true) . ')', -1);
 				} else {
 					$cleanTimeStart1 = microtime(true);
@@ -200,14 +202,20 @@ while (true) {
 				}
 			}
 		}
-		if ($cleanRule2) {
+		if ($cleanRule21 || $cleanRule22) {
 			LogStr('开始 cleanRule-2');
 			# 生成首页统计缓存.
 			if (!ConnectCache()) {
 				sleep(CacheRetryWaitTime);
 				continue;
 			}
-			$lastHour1 = $curHour; // 成功连接缓存后允许计时.
+			// 成功连接缓存后允许计时.
+			if ($cleanRule21) {
+				$lastHour21 = $curHour; 
+			}
+			if ($cleanRule22) {
+				$lastHour22 = $curHour;
+			}
 			$queryTimeStart2_0 = microtime(true);
 			$indexOutput = '';
 			$totalSeeder = 0;
@@ -429,19 +437,19 @@ while (true) {
 			file_put_contents('indexCache-Redis.txt', $indexOutput, LOCK_EX);
 			@chmod('indexCache-Redis.txt', 0777);
 			$queryTimeEnd2 = microtime(true);
-			$queryTimeStart2_0_ps = $queryTimeStart2_0_p * (IndexSleepTime / 1000000);
+			$queryTimeStart2_0_ps = $queryTimeStart2_0_p * (IndexSleepTime_Scan / 1000000);
 			$queryTimeStart2_10_ps = $queryTimeStart2_10_p * (IndexSleepTime / 1000000);
 			$queryTimeStart2_11_ps = $queryTimeStart2_11_p * (IndexSleepTime / 1000000);
 			$queryTimeStart2_12_ps = $queryTimeStart2_12_p * (IndexSleepTime / 1000000);
 			$queryTimeStart2_13_ps = $queryTimeStart2_13_p * (IndexSleepTime / 1000000);
 			$queryTimeStart2_1x_pt = $queryTimeStart2_10_p + $queryTimeStart2_11_p + $queryTimeStart2_12_p + $queryTimeStart2_13_p;
 			$queryTimeStart2_1x_pst = $queryTimeStart2_10_ps + $queryTimeStart2_11_ps + $queryTimeStart2_12_ps + $queryTimeStart2_13_ps;
-			LogStr("生成首页统计缓存成功, 本次花费时间: 总共/" . round($queryTimeEnd2 - $queryTimeStart2_0, 3) . " 秒, 实际/" . round($queryTimeEnd2 - $queryTimeStart2_0 - $queryTimeStart2_1x_pst, 3) . " 秒, 一阶段 (数据库获取/数组分配)/" . round($queryTimeStart2_1 - $queryTimeStart2_0, 3) . "秒 (暂停/{$queryTimeStart2_0_p} 次, {$queryTimeStart2_0_ps} 秒), 二阶段 (实际用户分析)/" . round($queryTimeStart2_2 - $queryTimeStart2_1, 3) . " 秒 (暂停/{$queryTimeStart2_10_p} + {$queryTimeStart2_11_p} + {$queryTimeStart2_12_p} + {$queryTimeStart2_13_p} = {$queryTimeStart2_1x_pt} 次, {$queryTimeStart2_10_ps} + {$queryTimeStart2_11_ps} + {$queryTimeStart2_12_ps} + {$queryTimeStart2_13_ps} = {$queryTimeStart2_1x_pst} 秒), 三阶段 (User-Agent 用户数求和)/" . round($queryTimeEnd2 - $queryTimeStart2_2, 3) . " 秒");
+			LogStr("生成首页统计缓存成功, 本次花费时间: 总共/" . round($queryTimeEnd2 - $queryTimeStart2_0, 3) . " 秒, 实际/" . round($queryTimeEnd2 - $queryTimeStart2_0 - $queryTimeStart2_0_ps - $queryTimeStart2_1x_pst, 3) . " 秒, 一阶段 (数据库获取/数组分配)/" . round($queryTimeStart2_1 - $queryTimeStart2_0, 3) . "秒 (暂停/{$queryTimeStart2_0_p} 次, {$queryTimeStart2_0_ps} 秒), 二阶段 (实际用户分析)/" . round($queryTimeStart2_2 - $queryTimeStart2_1, 3) . " 秒 (暂停/{$queryTimeStart2_10_p} + {$queryTimeStart2_11_p} + {$queryTimeStart2_12_p} + {$queryTimeStart2_13_p} = {$queryTimeStart2_1x_pt} 次, {$queryTimeStart2_10_ps} + {$queryTimeStart2_11_ps} + {$queryTimeStart2_12_ps} + {$queryTimeStart2_13_ps} = {$queryTimeStart2_1x_pst} 秒), 三阶段 (User-Agent 用户数求和)/" . round($queryTimeEnd2 - $queryTimeStart2_2, 3) . " 秒");
 		}
 
 		if ($cleanRule3) {
 			LogStr('开始 cleanRule-3');
-			$lastHour2 = $curHour; // 成功连接数据库后允许计时.
+			$lastHour3 = $curHour; // 成功连接数据库后允许计时.
 			# 清理 Nginx 日志和数据库.
 			//if (($curNginxTimestampDone + 3600) < microtime(true)) {
 			$curNginxTimestampDone = microtime(true);
