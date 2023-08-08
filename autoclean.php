@@ -246,7 +246,7 @@ while (true) {
 						$peerInfoHashIDList = $cache->zRange($peerInfoHashKey, 0, -1);
 						foreach ($peerInfoHashIDList as $peerInfoHashID) {
 							$peerTypeAndEvent = $cache->get("IP:{$peerInfoHash}+{$peerInfoHashID}:TE");
-							if ($peerTypeAndEvent === false) {
+							if ($peerTypeAndEvent === false || empty($peerTypeAndEvent)) {
 								continue;
 							}
 							list($peerType, $peerEvent) = explode(':', $peerTypeAndEvent, 2);

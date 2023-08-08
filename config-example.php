@@ -61,19 +61,20 @@ define('TG_GROUP', '@SimpleTrackerGroup');
 // Autoclean Config
 define('CheckInterval', 2);
 define('IndexSleepTime', 500000); // Microsecond, 1 Second = 1000000 Microsecond.
-define('IndexSleepTime_Scan', 1000000); // Microsecond, 1 Second = 1000000 Microsecond.
+define('IndexSleepTime_Scan', 500000); // Microsecond, 1 Second = 1000000 Microsecond.
 define('IndexCount', 10000);
 define('NginxPIDFile', '/var/run/nginx.pid'); // Letters or numbers only.
 define('NginxAccessLogFile', '/var/log/nginx/access.log'); // Letters or numbers only.
 define('CacheTimeout_Autoclean', 900); // Second.
 
 // Announce Config
-define('AnnounceInterval', 1200);
+define('AnnounceInterval', 1500);
 define('AnnounceMinInterval', 600);
-define('ScrapeMinInterval', 600);
+define('AnnounceMaxInterval', ceil(AnnounceInterval * 1.2)); // Associated with the database table, modification is not recommended.
 define('PremiumAnnounceInterval', 300);
 define('PremiumAnnounceMinInterval', 60);
-define('AnnounceMaxInterval', 2800); // Associated with the database table, modification is not recommended.
+define('PremiumAnnounceMaxInterval', ceil(PremiumAnnounceInterval * 1.2));
+define('ScrapeMinInterval', 600);
 
 // Message Config
 define('ErrorMessage', array(

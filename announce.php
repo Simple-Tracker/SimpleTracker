@@ -369,24 +369,24 @@ if ($clientType !== 0) {
 		// 出于 IPv4/IPv6 多重回报, 目前不阻止 (也没必要阻止) 重复回报更新 Peer 记录.
 		$multiQuery = $cache->multi(Redis::PIPELINE);
 		$multiQuery->zAdd("IH:{$clientInfoHash}", $curTime, $clientPeerID);
-		#$multiQuery->expire("IH:{$clientInfoHash}", AnnounceMaxInterval); // 若客户端不正常结束但种子较为热门, 则部分客户端不会过期, 应于 autoclean 实现.
-		$multiQuery->setEx("IP:{$clientInfoHash}+{$clientPeerID}:TE", AnnounceMaxInterval, "{$clientType}:{$clientEvent}");
+		#$multiQuery->expire("IH:{$clientInfoHash}", ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval)); // 若客户端不正常结束但种子较为热门, 则部分客户端不会过期, 应于 autoclean 实现.
+		$multiQuery->setEx("IP:{$clientInfoHash}+{$clientPeerID}:TE", ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval), "{$clientType}:{$clientEvent}");
 		if ($clientUserAgent !== null) {
-			$multiQuery->setEx("PI:UA:{$clientPeerID}", AnnounceMaxInterval, $clientUserAgent);
+			$multiQuery->setEx("PI:UA:{$clientPeerID}", ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval), $clientUserAgent);
 		}
 		if (isset($validClientIPList['ipv4'])) {
-			$multiQuery->zRemRangeByScore("PI:A4:{$clientPeerID}", 0, $curTime - AnnounceMaxInterval);
+			$multiQuery->zRemRangeByScore("PI:A4:{$clientPeerID}", 0, $curTime - ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval));
 			foreach ($validClientIPList['ipv4'] as $validClientIPv4) {
 				$multiQuery->zAdd("PI:A4:{$clientPeerID}", $curTime, "{$validClientIPv4}:{$clientPort}");
 			}
-			$multiQuery->expire("PI:A4:{$clientPeerID}", AnnounceMaxInterval);
+			$multiQuery->expire("PI:A4:{$clientPeerID}", ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval));
 		}
 		if (isset($validClientIPList['ipv6'])) {
-			$multiQuery->zRemRangeByScore("PI:A6:{$clientPeerID}", 0, $curTime - AnnounceMaxInterval);
+			$multiQuery->zRemRangeByScore("PI:A6:{$clientPeerID}", 0, $curTime - ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval));
 			foreach ($validClientIPList['ipv6'] as $validClientIPv6) {
 				$multiQuery->zAdd("PI:A6:{$clientPeerID}", $curTime, "{$validClientIPv6}:{$clientPort}");
 			}
-			$multiQuery->expire("PI:A6:{$clientPeerID}", AnnounceMaxInterval);
+			$multiQuery->expire("PI:A6:{$clientPeerID}", ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval));
 		}
 		$multiQuery->exec();
 		if (!$clientIsReannounced && $clientEvent === 'completed') {

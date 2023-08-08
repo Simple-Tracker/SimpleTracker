@@ -3,14 +3,14 @@
 
  Source Server         : tracker
  Source Server Type    : MariaDB
- Source Server Version : 101102
+ Source Server Version : 101104
  Source Schema         : SimpleTracker
 
  Target Server Type    : MariaDB
- Target Server Version : 101102
+ Target Server Version : 101104
  File Encoding         : 65001
 
- Date: 26/04/2023 17:24:55
+ Date: 18/08/2023 01:46:02
 */
 
 SET NAMES utf8mb4;
@@ -25,7 +25,7 @@ CREATE TABLE `Messages` (
   `key` varchar(24) NOT NULL,
   `message` varchar(24) DEFAULT NULL,
   `last_timestamp` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`info_hash`,`key`)
+  PRIMARY KEY (`info_hash`,`key`),
   KEY `last_timestamp` (`last_timestamp` DESC) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
