@@ -2,6 +2,7 @@
 if (PHP_SAPI !== 'cli') { die(); }
 ini_set('memory_limit', '1024M');
 require_once('config.php');
+#stream_context_set_default(array('http' => array('proxy' => 'tcp://192.168.233.253:7890', 'request_fulluri' => true)));
 function LogStr(string $message, int $status = 0, bool $logToFile = true): bool {
 	$logType = ($status === -1 ? '错误' : '信息');
 	$date = date('Y-m-d');
