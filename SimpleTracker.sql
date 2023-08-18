@@ -88,4 +88,11 @@ CREATE TABLE `Torrents` (
   KEY `total_completed` (`total_completed` DESC) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+DROP TABLE IF EXISTS `Blocklist`;
+CREATE TABLE `Blocklist` (
+  `info_hash` char(40) NOT NULL,
+  `reason` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`info_hash`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

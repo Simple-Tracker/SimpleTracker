@@ -24,7 +24,7 @@ function OutputHTMLEnd(string $str) {
 }
 header('Content-Type: text/html; charset=utf-8');
 echo "<!DOCTYPE html>\n<html>\n	<head>\n		<meta charset=\"utf-8\">\n		<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n		<link rel=\"stylesheet\" href=\"dark.css\">\n		<link rel=\"shortcut icon\" href=\"favicon.ico\" type=\"image/x-icon\">\n		<title>Tracker 状态信息 - Simple Tracker</title>\n	</head>\n	<body>\n		<pre>";
-echo "Simple Tracker [Version: 2023-08-07]\n";
+echo "Simple Tracker [Version: 2023-08-18]\n";
 echo "服务器 Telegram 频道: https://t.me/SimpleTracker\n";
 echo "服务器 Telegram 群组 (反馈与交流 BitTorrent 相关内容): https://t.me/SimpleTrackerGroup\n";
 echo "服务器 Tracker URL: https://t1.hloli.org/announce\n";

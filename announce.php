@@ -171,6 +171,10 @@ if ($clientCompact) {
 	$resBencodeArr['peers6'] = '';
 }
 $escapedClientInfoHash = $db->escape_string($clientInfoHash);
+$torrentBlocklistCheck = $db->query("SELECT 1 FROM Blocklist WHERE info_hash = '{$escapedClientInfoHash}' LIMIT 1");
+if ($torrentBlocklistCheck === false || $torrentBlocklistCheck->num_rows > 0) {
+	die(GenerateBencode(array('failure reason' => ErrorMessage[10])));
+}
 if ($premiumUser) {
 	if ($curSimpleTrackerKey !== null && !$clientStoppedOrPaused && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
 		if (strlen($_GET['m']) > 48) {
