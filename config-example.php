@@ -68,13 +68,13 @@ define('NginxAccessLogFile', '/var/log/nginx/access.log'); // Letters or numbers
 define('CacheTimeout_Autoclean', 900); // Second.
 
 // Announce Config
-define('AnnounceInterval', 1500);
-define('AnnounceMinInterval', 600);
-define('AnnounceMaxInterval', ceil(AnnounceInterval * 1.2)); // Associated with the database table, modification is not recommended.
+define('AnnounceInterval', 600);
+define('AnnounceMinInterval', 120);
+define('AnnounceMaxInterval', ceil(AnnounceInterval * 2)); // Associated with the database table, modification is not recommended.
 define('PremiumAnnounceInterval', 300);
 define('PremiumAnnounceMinInterval', 60);
-define('PremiumAnnounceMaxInterval', ceil(PremiumAnnounceInterval * 1.2));
-define('ScrapeMinInterval', 600);
+define('PremiumAnnounceMaxInterval', ceil(PremiumAnnounceInterval * 2));
+define('ScrapeMinInterval', 120);
 
 // Message Config
 define('ErrorMessage', array(
