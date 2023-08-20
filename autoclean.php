@@ -65,14 +65,20 @@ function CloseDB(): bool {
 }
 function ConnectCache(): bool {
 	global $cache;
-	if ($cache === null) {
-		$cache = new Redis();
-		$cache->connect(CacheAddress, CachePort, CacheTimeout_Autoclean);
-		if (CacheAuth !== null) {
-			$cache->auth(CacheAuth);
+	try {
+		if ($cache === null) {
+			$cache = new Redis();
+			$cache->connect(CacheAddress, CachePort, CacheTimeout_Autoclean);
+			if (CacheAuth !== null) {
+				$cache->auth(CacheAuth);
+			}
 		}
-	}
-	if ($cache->ping() !== true) {
+		if ($cache->ping() !== true) {
+			CloseCache();
+			LogStr('连接缓存时发生错误', -1);
+			return false;
+		}
+	} catch (Exception $e) {
 		CloseCache();
 		LogStr('连接缓存时发生错误', -1);
 		return false;

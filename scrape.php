@@ -33,16 +33,20 @@ $db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
 if ($db->connect_errno > 0) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
 }
-$cache = new Redis();
-if (CachePersistence) {
-	$cache->pconnect(CacheAddress, CachePort, CacheTimeout);
-} else {
-	$cache->connect(CacheAddress, CachePort, CacheTimeout);
-}
-if (CacheAuth !== null) {
-	$cache->auth(CacheAuth);
-}
-if ($cache->ping() !== true) {
+try {
+	$cache = new Redis();
+	if (CachePersistence) {
+		$cache->pconnect(CacheAddress, CachePort, CacheTimeout);
+	} else {
+		$cache->connect(CacheAddress, CachePort, CacheTimeout);
+	}
+	if (CacheAuth !== null) {
+		$cache->auth(CacheAuth);
+	}
+	if ($cache->ping() !== true) {
+		die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+	}
+} catch (Exception $e) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
 }
 $resBencodeArr = array('files' => array(), 'flags' => array('min_request_interval' => ScrapeMinInterval));
