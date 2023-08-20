@@ -131,9 +131,13 @@ if ($clientUserAgent !== null && stripos($clientUserAgent, 'bitcomet') !== false
 	}
 	$resBencodeArr['warning message'] = WarningMessage[4];
 }
-$db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
-if ($db->connect_errno > 0) {
-	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+if (DBPort === null) {
+	$db = null;
+} else {
+	$db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
+	if ($db->connect_errno > 0) {
+		die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+	}
 }
 try {
 	$cache = new Redis();
@@ -174,12 +178,14 @@ if ($clientCompact) {
 	$resBencodeArr['peers'] = '';
 	$resBencodeArr['peers6'] = '';
 }
-$escapedClientInfoHash = $db->escape_string($clientInfoHash);
-$torrentBlocklistCheck = $db->query("SELECT 1 FROM Blocklist WHERE info_hash = '{$escapedClientInfoHash}' LIMIT 1");
-if ($torrentBlocklistCheck === false || $torrentBlocklistCheck->num_rows > 0) {
-	die(GenerateBencode(array('failure reason' => ErrorMessage[10])));
+if ($db !== null) {
+	$escapedClientInfoHash = $db->escape_string($clientInfoHash);
+	$torrentBlocklistCheck = $db->query("SELECT 1 FROM Blocklist WHERE info_hash = '{$escapedClientInfoHash}' LIMIT 1");
+	if ($torrentBlocklistCheck === false || $torrentBlocklistCheck->num_rows > 0) {
+		die(GenerateBencode(array('failure reason' => ErrorMessage[10])));
+	}
 }
-if ($premiumUser) {
+if ($premiumUser && $db !== null) {
 	if ($curSimpleTrackerKey !== null && !$clientStoppedOrPaused && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
 		if (strlen($_GET['m']) > 48) {
 			die(GenerateBencode(array('failure reason' => ErrorMessage[9])));
@@ -195,11 +201,13 @@ if ($premiumUser) {
 	$resBencodeArr['interval'] = PremiumAnnounceInterval;
 	$resBencodeArr['min interval'] = PremiumAnnounceMinInterval;
 }
-$clientMessageIntervalCompareDate = date('Y-m-d H:i', ($curTime - PremiumAnnounceInterval - ceil(PremiumAnnounceInterval / 10))) . ':00';
-$clientMessageListQuery = $db->query("SELECT GROUP_CONCAT(message ORDER BY last_timestamp DESC SEPARATOR ' + ' LIMIT 3) FROM Messages WHERE info_hash = '{$escapedClientInfoHash}' AND last_timestamp > '{$clientMessageIntervalCompareDate}' LIMIT 1");
-if ($clientMessageListQuery !== false && ($clientMessageListResult = $clientMessageListQuery->fetch_row()) !== false && $clientMessageListResult !== null && !empty($clientMessageListResult[0])) {
-	$clientMessageList = "其它客户端传递的信息: {$clientMessageListResult[0]}";
-	$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $clientMessageList : "{$clientMessageList} | {$resBencodeArr['warning message']}");
+if ($db !== null) {
+	$clientMessageIntervalCompareDate = date('Y-m-d H:i', ($curTime - PremiumAnnounceInterval - ceil(PremiumAnnounceInterval / 10))) . ':00';
+	$clientMessageListQuery = $db->query("SELECT GROUP_CONCAT(message ORDER BY last_timestamp DESC SEPARATOR ' + ' LIMIT 3) FROM Messages WHERE info_hash = '{$escapedClientInfoHash}' AND last_timestamp > '{$clientMessageIntervalCompareDate}' LIMIT 1");
+	if ($clientMessageListQuery !== false && ($clientMessageListResult = $clientMessageListQuery->fetch_row()) !== false && $clientMessageListResult !== null && !empty($clientMessageListResult[0])) {
+		$clientMessageList = "其它客户端传递的信息: {$clientMessageListResult[0]}";
+		$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $clientMessageList : "{$clientMessageList} | {$resBencodeArr['warning message']}");
+	}
 }
 $clientAnnounceExpirationTime = $cache->ttl("IP:{$clientInfoHash}+{$clientPeerID}:TE");
 if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== false || stripos($clientUserAgent, 'bitcomet') !== false)) || stripos($clientPeerID, '-QB') === 0 || stripos($clientPeerID, '-BC') === 0) {
@@ -243,8 +251,12 @@ if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== 
 }
 $torrentSeeder = 0;
 $torrentLeecher = 0;
-$torrentDownloadedQuery = $db->query("SELECT total_completed FROM Torrents WHERE info_hash = '{$escapedClientInfoHash}' LIMIT 1");
-$torrentDownloaded = ($torrentDownloadedQuery !== false && ($torrentDownloadedResult = $torrentDownloadedQuery->fetch_row()) !== false && $torrentDownloadedResult !== null) ? intval($torrentDownloadedResult[0]) : 0;
+if ($db === null) {
+	$torrentDownloaded = null;
+} else {
+	$torrentDownloadedQuery = $db->query("SELECT total_completed FROM Torrents WHERE info_hash = '{$escapedClientInfoHash}' LIMIT 1");
+	$torrentDownloaded = ($torrentDownloadedQuery !== false && ($torrentDownloadedResult = $torrentDownloadedQuery->fetch_row()) !== false && $torrentDownloadedResult !== null) ? intval($torrentDownloadedResult[0]) : 0;
+}
 $clientNumwant = (isset($_GET['numwant']) && is_numeric($_GET['numwant'])) ? intval($_GET['numwant']) : 50;
 if ($clientNumwant < 1 || $clientNumwant > 1000) {
 	$clientNumwant = 50;
@@ -367,7 +379,9 @@ if ($clientUploaded !== null && $clientDownloaded !== null) {
 */
 $resBencodeArr['complete'] = $torrentSeeder;
 $resBencodeArr['incomplete'] = $torrentLeecher;
-$resBencodeArr['downloaded'] = $torrentDownloaded;
+if ($torrentDownloaded !== null) {
+	$resBencodeArr['downloaded'] = $torrentDownloaded;
+}
 if ($clientType !== 0) {
 	if ($clientStoppedOrPaused) {
 		$cache->zRem("IH:{$clientInfoHash}", $clientPeerID);
@@ -397,7 +411,7 @@ if ($clientType !== 0) {
 			$multiQuery->expire("PI:A6:{$clientPeerID}", ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval));
 		}
 		$multiQuery->exec();
-		if (!$clientIsReannounced && $clientEvent === 'completed') {
+		if (!$clientIsReannounced && $clientEvent === 'completed' && $db !== null) {
 			#$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed, total_uploaded, total_downloaded) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed), total_uploaded = total_uploaded + VALUES(total_uploaded), total_downloaded = total_downloaded + VALUES(total_downloaded)");
 			/*
 			$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed) VALUES (?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
@@ -411,7 +425,9 @@ if ($clientType !== 0) {
 		}
 	}
 }
-$db->close();
+if ($db !== null) {
+	$db->close();
+}
 if (!CachePersistence) {
 	$cache->close();
 }

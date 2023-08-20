@@ -39,21 +39,25 @@ function ipv6Filter(int $var) {
 	return ($var === 1);
 }
 */
-function ConnectDB(): bool {
+function ConnectDB(): int {
 	global $db;
+	if (DBPort === null) {
+		$db = null;
+		return 0;
+	}
 	if ($db === null) {
 		$db = @new MySQLi(DBAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
 	}
 	if (!isset($db->connect_errno) || !is_int($db->connect_errno)) {
 		LogStr('连接数据库时发生错误, 错误代码: 未知', -1);
-		return false;
+		return -1;
 	}
 	if ($db->connect_errno > 0) {
 		LogStr('连接数据库时发生错误, 错误代码: ' . $db->connect_errno, -1);
 		$db = null;
-		return false;
+		return -1;
 	}
-	return true;
+	return 1;
 }
 function CloseDB(): bool {
 	global $db;
@@ -170,53 +174,56 @@ while (true) {
 	if ($cleanRule1 || $cleanRule21 || $cleanRule22 || $cleanRule3) {
 		$curTime = time();
 		$curYear = intval(date('Y'));
-		if (!ConnectDB()) {
-			sleep(DBRetryWaitTime);
-			continue;
-		}
 		if ($cleanRule1) {
-			if (!ConnectDB()) {
+			$connectDBStatus = ConnectDB();
+			if ($connectDBStatus < 0) {
+				LogStr('cleanRule-1: 数据库连接失败', -1);
 				sleep(DBRetryWaitTime);
 				continue;
-			}
-			LogStr('开始 cleanRule-1');
-			$lastDate1 = "{$curMonth}-{$curDay}"; // 成功连接数据库后允许计时.
-			$queryTimeStart1 = microtime(true);
-			$totalCompletedQuery = $db->query("SELECT SUM(total_completed) FROM Torrents LIMIT 1");
-			$totalCompleted = ($totalCompletedQuery !== false && ($totalCompletedResult = $totalCompletedQuery->fetch_row()) !== false && $totalCompletedResult !== null) ? intval($totalCompletedResult[0]) : 0;
-			$popularTorrentsQuery = $db->query('SELECT * FROM Torrents ORDER BY total_completed DESC LIMIT 50');
-			if ($popularTorrentsQuery !== false) {
-				$popularTorrentMessage = '';
-				while ($popularTorrentResult = $popularTorrentsQuery->fetch_assoc()) {
-					$popularTorrentMessage .= "种子 Hash: {$popularTorrentResult['info_hash']} (完成数: {$popularTorrentResult['total_completed']}).\n";
-				}
-				if ($curMonth === 1) {
-					$curYear--;
-					$curMonth = 12;
-				} else {
-					$curMonth = str_pad($curMonth - 1, 2, 0 ,STR_PAD_LEFT);
-				}
-				$startDate = "{$curYear}-{$curMonth}-01";
-				$endDate = date('Y-m-d', strtotime('-1 day'));
-				$popularTorrentMessage = "服务器 Tracker 已统计完成数记录 ({$startDate} 至 {$endDate}), 本次花费时间: " . round(microtime(true) - $queryTimeStart1, 3) . " 秒, 并将进行自动清理.\n本月共计完成数: {$totalCompleted}.\n\n{$popularTorrentMessage}";
-				if (($sendMessageRetCode = SendMessage($popularTorrentMessage)) === false) {
-					$lastDate1 = null;
-					LogStr('发送消息失败, 将不清理 MySQL Torrents 表 (返回值: ' . var_export($sendMessageRetCode, true) . ')', -1);
-				} else {
-					$cleanTimeStart1 = microtime(true);
-					if ($db->query('TRUNCATE TABLE Torrents') !== false) {
-						LogStr('清理 MySQL Torrents 表成功, 本次花费时间: ' . round(microtime(true) - $cleanTimeStart1, 3) . ' 秒');
+			} else if ($connectDBStatus === 0) {
+				LogStr('cleanRule-1: 忽略');
+				$lastDate1 = "{$curMonth}-{$curDay}"; // 跳过连接数据库后允许计时.
+			} else {
+				LogStr('cleanRule-1: 开始');
+				$lastDate1 = "{$curMonth}-{$curDay}"; // 成功连接数据库后允许计时.
+				$queryTimeStart1 = microtime(true);
+				$totalCompletedQuery = $db->query("SELECT SUM(total_completed) FROM Torrents LIMIT 1");
+				$totalCompleted = ($totalCompletedQuery !== false && ($totalCompletedResult = $totalCompletedQuery->fetch_row()) !== false && $totalCompletedResult !== null) ? intval($totalCompletedResult[0]) : 0;
+				$popularTorrentsQuery = $db->query('SELECT * FROM Torrents ORDER BY total_completed DESC LIMIT 50');
+				if ($popularTorrentsQuery !== false) {
+					$popularTorrentMessage = '';
+					while ($popularTorrentResult = $popularTorrentsQuery->fetch_assoc()) {
+						$popularTorrentMessage .= "种子 Hash: {$popularTorrentResult['info_hash']} (完成数: {$popularTorrentResult['total_completed']}).\n";
+					}
+					if ($curMonth === 1) {
+						$curYear--;
+						$curMonth = 12;
+					} else {
+						$curMonth = str_pad($curMonth - 1, 2, 0 ,STR_PAD_LEFT);
+					}
+					$startDate = "{$curYear}-{$curMonth}-01";
+					$endDate = date('Y-m-d', strtotime('-1 day'));
+					$popularTorrentMessage = "服务器 Tracker 已统计完成数记录 ({$startDate} 至 {$endDate}), 本次花费时间: " . round(microtime(true) - $queryTimeStart1, 3) . " 秒, 并将进行自动清理.\n本月共计完成数: {$totalCompleted}.\n\n{$popularTorrentMessage}";
+					if (($sendMessageRetCode = SendMessage($popularTorrentMessage)) === false) {
+						$lastDate1 = null;
+						LogStr('cleanRule-1: 发送消息失败, 将不清理 MySQL Torrents 表 (返回值: ' . var_export($sendMessageRetCode, true) . ')', -1);
+					} else {
+						$cleanTimeStart1 = microtime(true);
+						if ($db->query('TRUNCATE TABLE Torrents') !== false) {
+							LogStr('cleanRule-1: 清理 MySQL Torrents 表成功, 本次花费时间: ' . round(microtime(true) - $cleanTimeStart1, 3) . ' 秒');
+						}
 					}
 				}
 			}
 		}
 		if ($cleanRule21 || $cleanRule22) {
-			LogStr('开始 cleanRule-2');
 			# 生成首页统计缓存.
 			if (!ConnectCache()) {
+				LogStr('cleanRule-2: 缓存连接失败', -1);
 				sleep(CacheRetryWaitTime);
 				continue;
 			}
+			LogStr('cleanRule-2: 开始');
 			// 成功连接缓存后允许计时.
 			if ($cleanRule21) {
 				$lastHour21 = $curHour; 
@@ -452,11 +459,11 @@ while (true) {
 			$queryTimeStart2_13_ps = $queryTimeStart2_13_p * (IndexSleepTime / 1000000);
 			$queryTimeStart2_1x_pt = $queryTimeStart2_10_p + $queryTimeStart2_11_p + $queryTimeStart2_12_p + $queryTimeStart2_13_p;
 			$queryTimeStart2_1x_pst = $queryTimeStart2_10_ps + $queryTimeStart2_11_ps + $queryTimeStart2_12_ps + $queryTimeStart2_13_ps;
-			LogStr("生成首页统计缓存成功, 本次花费时间: 总共/" . round($queryTimeEnd2 - $queryTimeStart2_0, 3) . " 秒, 实际/" . round($queryTimeEnd2 - $queryTimeStart2_0 - $queryTimeStart2_0_ps - $queryTimeStart2_1x_pst, 3) . " 秒, 一阶段 (数据库获取/数组分配)/" . round($queryTimeStart2_1 - $queryTimeStart2_0, 3) . "秒 (暂停/{$queryTimeStart2_0_p} 次, {$queryTimeStart2_0_ps} 秒), 二阶段 (实际用户分析)/" . round($queryTimeStart2_2 - $queryTimeStart2_1, 3) . " 秒 (暂停/{$queryTimeStart2_10_p} + {$queryTimeStart2_11_p} + {$queryTimeStart2_12_p} + {$queryTimeStart2_13_p} = {$queryTimeStart2_1x_pt} 次, {$queryTimeStart2_10_ps} + {$queryTimeStart2_11_ps} + {$queryTimeStart2_12_ps} + {$queryTimeStart2_13_ps} = {$queryTimeStart2_1x_pst} 秒), 三阶段 (User-Agent 用户数求和)/" . round($queryTimeEnd2 - $queryTimeStart2_2, 3) . " 秒");
+			LogStr("cleanRule-2: 生成首页统计缓存成功, 本次花费时间: 总共/" . round($queryTimeEnd2 - $queryTimeStart2_0, 3) . " 秒, 实际/" . round($queryTimeEnd2 - $queryTimeStart2_0 - $queryTimeStart2_0_ps - $queryTimeStart2_1x_pst, 3) . " 秒, 一阶段 (数据库获取/数组分配)/" . round($queryTimeStart2_1 - $queryTimeStart2_0, 3) . "秒 (暂停/{$queryTimeStart2_0_p} 次, {$queryTimeStart2_0_ps} 秒), 二阶段 (实际用户分析)/" . round($queryTimeStart2_2 - $queryTimeStart2_1, 3) . " 秒 (暂停/{$queryTimeStart2_10_p} + {$queryTimeStart2_11_p} + {$queryTimeStart2_12_p} + {$queryTimeStart2_13_p} = {$queryTimeStart2_1x_pt} 次, {$queryTimeStart2_10_ps} + {$queryTimeStart2_11_ps} + {$queryTimeStart2_12_ps} + {$queryTimeStart2_13_ps} = {$queryTimeStart2_1x_pst} 秒), 三阶段 (User-Agent 用户数求和)/" . round($queryTimeEnd2 - $queryTimeStart2_2, 3) . " 秒");
 		}
 
 		if ($cleanRule3) {
-			LogStr('开始 cleanRule-3');
+			LogStr('cleanRule-3: 开始');
 			$lastHour3 = $curHour; // 成功连接数据库后允许计时.
 			# 清理 Nginx 日志和数据库.
 			//if (($curNginxTimestampDone + 3600) < microtime(true)) {
@@ -465,9 +472,9 @@ while (true) {
 				system('rm -f ' . NginxAccessLogFile . '.tmp ' . NginxAccessLogFile . '-*');
 			}
 			if (is_file(NginxAccessLogFile) && system('mv ' . NginxAccessLogFile . ' '. NginxAccessLogFile . '.tmp') !== false) {
-				LogStr('成功移动 Nginx 日志至临时');
+				LogStr('cleanRule-3: 成功移动 Nginx 日志至临时');
 			}
-			LogStr('清理 Nginx 日志成功, 本次花费时间: ' . round(microtime(true) - $curNginxTimestampDone, 3) . ' 秒');
+			LogStr('cleanRule-3: 清理 Nginx 日志成功, 本次花费时间: ' . round(microtime(true) - $curNginxTimestampDone, 3) . ' 秒');
 			CleanNginx(true);
 		}
 		CloseDB();

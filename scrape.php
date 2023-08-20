@@ -29,9 +29,13 @@ if (!$premiumUser) {
 		die(GenerateBencode(array('failure reason' => ErrorMessage[6])));
 	}
 }
-$db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
-if ($db->connect_errno > 0) {
-	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+if (DBPort === null) {
+	$db = null;
+} else {
+	$db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
+	if ($db->connect_errno > 0) {
+		die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+	}
 }
 try {
 	$cache = new Redis();
@@ -52,6 +56,9 @@ try {
 $resBencodeArr = array('files' => array(), 'flags' => array('min_request_interval' => ScrapeMinInterval));
 $filesArr = array();
 if ($premiumUser) {
+	if ($db === null) {
+		die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+	}
 	$torrentResult = $db->query('SELECT info_hash, total_completed FROM Torrents ORDER BY total_completed DESC', MYSQLI_USE_RESULT);
 	while ($torrentRow = $torrentResult->fetch_assoc()) {
 		if (empty($torrentRow['info_hash'])) {
@@ -89,20 +96,27 @@ if ($premiumUser) {
 				$torrentLeecher++;
 			}
 		}
-		$escapeValue = $db->escape_string($clientInfoHash);
-		$queryWhereSQL .= "info_hash = '{$escapeValue}' OR ";
-		$filesArr[hex2bin($clientInfoHash)] = array('complete' => $torrentSeeder, 'incomplete' => $torrentLeecher, 'downloaded' => 0);
-	}
-	$queryWhereSQL = substr($queryWhereSQL, 0, -4) . ' LIMIT ' . count($clientInfoHashList);
-	$torrentTotalCompletedList = $db->query("SELECT info_hash, total_completed FROM Torrents {$queryWhereSQL}");
-	while ($torrentTotalCompleted = $torrentTotalCompletedList->fetch_assoc()) {
-		if (empty($torrentTotalCompleted['info_hash'])) {
-			continue;
+		$filesArr[hex2bin($clientInfoHash)] = array('complete' => $torrentSeeder, 'incomplete' => $torrentLeecher);
+		if ($db !== null) {
+			$escapeValue = $db->escape_string($clientInfoHash);
+			$queryWhereSQL .= "info_hash = '{$escapeValue}' OR ";
+			$filesArr[hex2bin($clientInfoHash)]['downloaded'] = 0;
 		}
-		$filesArr[hex2bin($torrentTotalCompleted['info_hash'])]['downloaded'] = $torrentTotalCompleted['total_completed'];
+	}
+	if ($db !== null) {
+		$queryWhereSQL = substr($queryWhereSQL, 0, -4) . ' LIMIT ' . count($clientInfoHashList);
+		$torrentTotalCompletedList = $db->query("SELECT info_hash, total_completed FROM Torrents {$queryWhereSQL}");
+		while ($torrentTotalCompleted = $torrentTotalCompletedList->fetch_assoc()) {
+			if (empty($torrentTotalCompleted['info_hash'])) {
+				continue;
+			}
+			$filesArr[hex2bin($torrentTotalCompleted['info_hash'])]['downloaded'] = $torrentTotalCompleted['total_completed'];
+		}
 	}
 }
-$db->close();
+if ($db !== null) {
+	$db->close();
+}
 if (!CachePersistence) {
 	$cache->close();
 }

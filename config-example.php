@@ -9,7 +9,7 @@ define('ServerMessage', '服务器 Telegram 群组 (反馈与交流 BitTorrent �
 mysqli_report(MYSQLI_REPORT_OFF);
 define('DBAddress', 'localhost');
 define('DBPAddress', 'p:localhost');
-define('DBPort', 3306);
+define('DBPort', 3306); // port or null.
 define('DBUser', '');
 define('DBPass', '');
 define('DBName', '');
