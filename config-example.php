@@ -9,7 +9,7 @@ define('ServerMessage', '服务器 Telegram 群组 (反馈与交流 BitTorrent �
 mysqli_report(MYSQLI_REPORT_OFF);
 define('DBAddress', 'localhost');
 define('DBPAddress', 'p:localhost');
-define('DBPort', 3306);
+define('DBPort', 3306); // port or null.
 define('DBUser', '');
 define('DBPass', '');
 define('DBName', '');
@@ -19,11 +19,19 @@ $curHour = intval(date('h'));
 define('CurDBName', 'Peers_' . (($curHour === 2 || $curHour === 4 || $curHour === 6 || $curHour === 8 || $curHour === 10 || $curHour === 12) ? '1' : '2'));
 define('OldDBName', 'Peers_' . (CurDBName === 'Peers_2' ? '1' : '2'));
 
+// Redis Config
+define('CacheAddress', '/var/run/redis/redis.sock');
+define('CachePort', 0);
+define('CachePersistence', true);
+define('CacheAuth', null); // auth or null.
+define('CacheTimeout', 16); // Second.
+define('CacheRetryWaitTime', 10);
+
 // Key Config
 define('GeneralDebugKey', '221210');
 define('AdminKey', 'ak-');
 define('UserKeyPrefix', 'uk-');
-#define('UserKeyDir', 'UserKey-Custom');
+define('UserKeyDir', 'UserKey-Custom');
 // 返回 Debug Level.
 function CheckKeyAvailability(string $key): int {
 	global $db, $curSimpleTrackerKey;
@@ -53,17 +61,20 @@ define('TG_GROUP', '@SimpleTrackerGroup');
 // Autoclean Config
 define('CheckInterval', 2);
 define('IndexSleepTime', 500000); // Microsecond, 1 Second = 1000000 Microsecond.
+define('IndexSleepTime_Scan', 500000); // Microsecond, 1 Second = 1000000 Microsecond.
 define('IndexCount', 10000);
 define('NginxPIDFile', '/var/run/nginx.pid'); // Letters or numbers only.
 define('NginxAccessLogFile', '/var/log/nginx/access.log'); // Letters or numbers only.
+define('CacheTimeout_Autoclean', 900); // Second.
 
 // Announce Config
-define('AnnounceInterval', 900);
-define('AnnounceMinInterval', 300);
-define('ScrapeMinInterval', 300);
+define('AnnounceInterval', 600);
+define('AnnounceMinInterval', 120);
+define('AnnounceMaxInterval', ceil(AnnounceInterval * 2)); // Associated with the database table, modification is not recommended.
 define('PremiumAnnounceInterval', 300);
 define('PremiumAnnounceMinInterval', 60);
-define('AnnounceMaxInterval', 3600); // Associated with the database table, modification is not recommended.
+define('PremiumAnnounceMaxInterval', ceil(PremiumAnnounceInterval * 2));
+define('ScrapeMinInterval', 120);
 
 // Message Config
 define('ErrorMessage', array(
@@ -75,7 +86,8 @@ define('ErrorMessage', array(
 	6 => '服务器已禁止你的客户端, 建议你换用其它客户端. (EC: 6)',
 	7 => 'The server has banned your client, it is recommended that you switch to the new version of the client. (EC: 7)',
 	8 => '服务器无法验证这个 SimpleTracker Key. (EC: 8)',
-	9 => '服务器认为传递的信息不合法. (EC: 9)'
+	9 => '服务器认为传递的信息不合法. (EC: 9)',
+	10 => '服务器发现这个种子在黑名单. (EC: 10)'
 ));
 define('WarningMessage', array(
 	1 => '服务器无法验证你的端口, 因此你的速度可能会受到影响. (WC: 1)',

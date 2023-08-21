@@ -125,8 +125,8 @@ while (true) {
 	}
 	*/
 	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1); // 完成数统计. (每月 1 号执行)
-	$cleanRule2 = ($lastHour1 !== $curHour && $curMinute >= 50 && $curMinute <= 55); // 每小时于 45-50 分执行 1 次.
-	$cleanRule3 = ($lastHour2 !== $curHour && $curMinute >= 55 && $curMinute <= 58); // 每小时于 50-58 分执行 1 次.
+	$cleanRule2 = ($lastHour1 !== $curHour && $curMinute >= 45 && $curMinute <= 50); // 每小时于 45-50 分执行 1 次.
+	$cleanRule3 = ($lastHour2 !== $curHour && $curMinute >= 50 && $curMinute <= 58); // 每小时于 50-58 分执行 1 次.
 	if ($cleanRule1 || $cleanRule2 || $cleanRule3) {
 		$curTime = time();
 		$curYear = intval(date('Y'));
@@ -400,7 +400,7 @@ while (true) {
 			$queryTimeStart2_13_ps = $queryTimeStart2_13_p * (IndexSleepTime / 1000000);
 			$queryTimeStart2_1x_pt = $queryTimeStart2_10_p + $queryTimeStart2_11_p + $queryTimeStart2_12_p + $queryTimeStart2_13_p;
 			$queryTimeStart2_1x_pst = $queryTimeStart2_10_ps + $queryTimeStart2_11_ps + $queryTimeStart2_12_ps + $queryTimeStart2_13_ps;
-			LogStr("生成首页统计缓存成功, 本次花费时间: 总共/" . round($queryTimeEnd2 - $queryTimeStart2_0, 3) . " 秒, 实际/" . round($queryTimeEnd2 - $queryTimeStart2_0 - $queryTimeStart2_1x_pst, 3) . " 秒, 一阶段 (数据库获取/数组分配)/" . round($queryTimeStart2_1 - $queryTimeStart2_0, 3) . "秒 (暂停/{$queryTimeStart2_0_p} 次, {$queryTimeStart2_0_ps} 秒), 二阶段 (实际用户分析)/" . round($queryTimeStart2_2 - $queryTimeStart2_1, 3) . " 秒 (暂停/{$queryTimeStart2_10_p} + {$queryTimeStart2_11_p} + {$queryTimeStart2_12_p} + {$queryTimeStart2_13_p} = {$queryTimeStart2_1x_pt} 次, {$queryTimeStart2_10_ps} + {$queryTimeStart2_11_ps} + {$queryTimeStart2_12_ps} + {$queryTimeStart2_13_ps} = {$queryTimeStart2_1x_pst} 秒), 三阶段 (User-Agent 用户数求和)/" . round($queryTimeEnd2 - $queryTimeStart2_2, 3) . " 秒");
+			LogStr("生成首页统计缓存成功, 本次花费时间: 总共/" . round($queryTimeEnd2 - $queryTimeStart2_0, 3) . " 秒, 实际/" . round($queryTimeEnd2 - $queryTimeStart2_0 - $queryTimeStart2_0_ps - $queryTimeStart2_1x_pst, 3) . " 秒, 一阶段 (数据库获取/数组分配)/" . round($queryTimeStart2_1 - $queryTimeStart2_0, 3) . "秒 (暂停/{$queryTimeStart2_0_p} 次, {$queryTimeStart2_0_ps} 秒), 二阶段 (实际用户分析)/" . round($queryTimeStart2_2 - $queryTimeStart2_1, 3) . " 秒 (暂停/{$queryTimeStart2_10_p} + {$queryTimeStart2_11_p} + {$queryTimeStart2_12_p} + {$queryTimeStart2_13_p} = {$queryTimeStart2_1x_pt} 次, {$queryTimeStart2_10_ps} + {$queryTimeStart2_11_ps} + {$queryTimeStart2_12_ps} + {$queryTimeStart2_13_ps} = {$queryTimeStart2_1x_pst} 秒), 三阶段 (User-Agent 用户数求和)/" . round($queryTimeEnd2 - $queryTimeStart2_2, 3) . " 秒");
 		}
 
 		if ($cleanRule3) {

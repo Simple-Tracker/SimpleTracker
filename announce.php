@@ -116,6 +116,7 @@ if ($clientInfoHash !== '457b1b9f117d95cf7982b6deb6c5fdd14f3f0180') {
 */
 $clientLeft = $_GET['left'] ?? null;
 $clientType = 0;
+$clientStoppedOrPaused = (in_array($clientEvent, array('stopped', 'paused')));
 if ($clientLeft !== null) {
 	$clientType = (intval($clientLeft) === 0) ? 2 : 1;
 }
@@ -155,6 +156,10 @@ $curTime = time();
 #$db->query('SET NAMES utf8mb4 COLLATE utf8mb4_general_ci');
 #$db->query('DELETE FROM Peers WHERE last_timestamp < DATE_SUB(NOW(), INTERVAL 12 HOUR) LIMIT 500');
 $escapedClientInfoHash = $db->escape_string($clientInfoHash);
+$torrentBlocklistCheck = $db->query("SELECT 1 FROM Blocklist WHERE info_hash = '{$escapedClientInfoHash}' LIMIT 1");
+if ($torrentBlocklistCheck === false || $torrentBlocklistCheck->num_rows > 0) {
+	die(GenerateBencode(array('failure reason' => ErrorMessage[10])));
+}
 $escapedClientPeerID = $db->escape_string($clientPeerID);
 $resBencodeArr = array('interval' => AnnounceInterval, 'min interval' => AnnounceMinInterval, 'complete' => 0, 'incomplete' => 0, 'downloaded' => 0, 'peers' => array());
 $clientCompact = (isset($_GET['compact']) && intval($_GET['compact']) === 1) ? true : false;
@@ -163,7 +168,7 @@ if ($clientCompact) {
 	$resBencodeArr['peers6'] = '';
 }
 if ($premiumUser) {
-	if ($curSimpleTrackerKey !== null && ($clientEvent === '' || !in_array(strtolower($clientEvent), array('stopped', 'paused'))) && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
+	if ($curSimpleTrackerKey !== null && !$clientStoppedOrPaused && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
 		if (strlen($_GET['m']) > 48) {
 			die(GenerateBencode(array('failure reason' => ErrorMessage[9])));
 		}
@@ -184,13 +189,15 @@ if ($clientMessageListQuery !== false && ($clientMessageListResult = $clientMess
 	$clientMessageList = "其它客户端传递的信息: {$clientMessageListResult[0]}";
 	$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $clientMessageList : "{$clientMessageList} | {$resBencodeArr['warning message']}");
 }
-if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== false || stripos($clientUserAgent, 'bitcomet') !== false)) || stripos($clientPeerID, '-QB') === 0 || stripos($clientPeerID, '-BC') === 0) {
+$noWarnClient = false;
+if (stripos($clientPeerID, '-BC') === 0) {
 	$noWarnClient = true;
-	if (stripos($clientPeerID, '-QB') === 0) {
+} else if (($qBPeerIDCheck = stripos($clientPeerID, '-QB')) === 0 || ($qBUACheck = ($clientUserAgent !== null ? stripos($clientUserAgent, 'qbittorrent') : false)) !== false) {
+	if ($qBPeerIDCheck === 0) {
 		$mainClientVersion = hexdec($clientPeerID[3]);
 		$sub1ClientVersion = hexdec($clientPeerID[4]);
 		$sub2ClientVersion = hexdec($clientPeerID[5]);
-	} else if ($clientUserAgent !== null && stripos($clientUserAgent, 'qbittorrent') !== false) {
+	} else if ($qBUACheck !== false) {
 		$clientVerStr = strstr($clientUserAgent, '/');
 		if ($clientVerStr === false) {
 			$clientVerStr = strstr($clientUserAgent, ' ');
@@ -209,23 +216,20 @@ if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== 
 			}
 		}
 	}
-	if (isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) && $mainClientVersion !== false && $sub1ClientVersion !== false && $sub2ClientVersion !== false && ($mainClientVersion > 4 || ($mainClientVersion === 4 && ($sub1ClientVersion > 3 || ($sub1ClientVersion === 3 && $sub2ClientVersion > 6))))) {
-		$noWarnClient = false;
+	if (!isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) || $mainClientVersion === false || $sub1ClientVersion === false || $sub2ClientVersion === false || $mainClientVersion < 4 || ($mainClientVersion === 4 && ($sub1ClientVersion < 3 || ($sub1ClientVersion === 3 && $sub2ClientVersion < 6)))) {
+		$noWarnClient = true;
 	}
-	if ($noWarnClient) {
-		$intervalCompareDate = date('Y-m-d H:i', ($curTime - ($resBencodeArr['interval'] * 2))) . ':00';
-		$noWarnClientMinIntervalCompareDate = date('Y-m-d H:i:s', ($curTime + ceil($resBencodeArr['interval'] * 2 / 10) - ceil($resBencodeArr['interval'] * 2 / 3)));
-		$noWarnClientAnnounceIntervalCheck = $db->query("(SELECT 1 FROM Peers_1 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_timestamp > '{$intervalCompareDate}' AND last_timestamp < '{$noWarnClientMinIntervalCompareDate}' LIMIT 1) UNION ALL (SELECT 1 FROM Peers_2 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_timestamp > '{$intervalCompareDate}' AND last_timestamp < '{$noWarnClientMinIntervalCompareDate}' LIMIT 1) LIMIT 1");
-		if ($noWarnClientAnnounceIntervalCheck->num_rows > 0) {
-			die(GenerateBencode(array('failure reason' => (isset($resBencodeArr['warning message']) ? $resBencodeArr['warning message'] : ServerMessage))));
-		}
-		$noWarnClientAnnounceIntervalCheck->close();
-		//$resBencodeArr['interval'] = intval(ceil($resBencodeArr['interval'] / 2));
-		$resBencodeArr['min interval'] = $resBencodeArr['interval'];
-	} else if (isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) && $mainClientVersion !== false && $sub1ClientVersion !== false && $sub2ClientVersion !== false && ($mainClientVersion === 4 && $sub1ClientVersion === 5 && $sub2ClientVersion < 2)) {
-		$qB45WarningMessage = 'qBittorrent 4.5 系列 Web UI 暴出未授权任意文件访问漏洞, 将影响安全性. 如果你正在使用该系列客户端, 请考虑升级 4.5.2/关闭 Web UI 对外访问/降级.';
-		$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $qB45WarningMessage : "{$qB45WarningMessage} | {$resBencodeArr['warning message']}");
+}
+if ($noWarnClient) {
+	$intervalCompareDate = date('Y-m-d H:i', ($curTime - ($resBencodeArr['interval'] * 2))) . ':00';
+	$noWarnClientMinIntervalCompareDate = date('Y-m-d H:i:s', ($curTime + ceil($resBencodeArr['interval'] * 2 / 10) - ceil($resBencodeArr['interval'] * 2 / 3)));
+	$noWarnClientAnnounceIntervalCheck = $db->query("(SELECT 1 FROM Peers_1 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_timestamp > '{$intervalCompareDate}' AND last_timestamp < '{$noWarnClientMinIntervalCompareDate}' LIMIT 1) UNION ALL (SELECT 1 FROM Peers_2 WHERE info_hash = '{$escapedClientInfoHash}' AND peer_id = '{$escapedClientPeerID}' AND last_timestamp > '{$intervalCompareDate}' AND last_timestamp < '{$noWarnClientMinIntervalCompareDate}' LIMIT 1) LIMIT 1");
+	if ($noWarnClientAnnounceIntervalCheck->num_rows > 0) {
+		die(GenerateBencode(array('failure reason' => (isset($resBencodeArr['warning message']) ? $resBencodeArr['warning message'] : ServerMessage))));
 	}
+	$noWarnClientAnnounceIntervalCheck->close();
+	//$resBencodeArr['interval'] = intval(ceil($resBencodeArr['interval'] / 2));
+	$resBencodeArr['min interval'] = $resBencodeArr['interval'];
 }
 $torrentSeeder = 0;
 $torrentLeecher = 0;
@@ -245,7 +249,7 @@ if (OldDBName === 'Peers_1') {
 } else {
 	$table2PeerQuerySQL .= $compareSQL;
 }
-if ($clientEvent === '' || in_array(strtolower($clientEvent), array('started', 'completed', 'update'))) {
+if (!$clientStoppedOrPaused) {
 	$peerQuerySTMT = $db->prepare("({$table1PeerQuerySQL} ORDER BY last_timestamp DESC LIMIT ?) UNION ALL ({$table2PeerQuerySQL} ORDER BY last_timestamp DESC LIMIT ?) ORDER BY last_timestamp DESC LIMIT ?");
 	$peerQuerySTMT->bind_param('ssissii', $clientInfoHash, $clientPeerID, $clientNumwant, $clientInfoHash, $clientPeerID, $clientNumwant, $clientNumwant);
 	$peerQuerySTMT->bind_result($peerID, $peerLastTimestamp, $peerType, $peerIPv4Str, $peerIPv6Str, $peerPort);
@@ -324,9 +328,9 @@ if (($clientPort = intval($clientPort)) > 1 && $clientPort < 65536) {
 	#AddIPToArr($validClientIPList, $clientIPList, $clientIPv4List, $clientIPv6List, $clientIPsList);
 	# !isset($validClientIPList['ipv4']), !isset($validClientIPList['ipv6'])
 	if (filter_var($clientIP, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-		$validClientIPList['ipv4'][] = $clientIP;
+		$validClientIPList['ipv4'][] = strtolower($clientIP);
 	} else if (filter_var($clientIP, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-		$validClientIPList['ipv6'][] = $clientIP;
+		$validClientIPList['ipv6'][] = strtolower($clientIP);
 	}
 } else {
 	if ($clientPort !== 1) {
