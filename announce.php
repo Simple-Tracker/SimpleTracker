@@ -210,43 +210,44 @@ if ($db !== null) {
 	}
 }
 $clientAnnounceExpirationTime = $cache->ttl("IP:{$clientInfoHash}+{$clientPeerID}:TE");
-if (($clientUserAgent !== null && (stripos($clientUserAgent, 'qbittorrent') !== false || stripos($clientUserAgent, 'bitcomet') !== false)) || stripos($clientPeerID, '-QB') === 0 || stripos($clientPeerID, '-BC') === 0) {
-	$noWarnClient = true;
-	if (stripos($clientPeerID, '-QB') === 0) {
-		$mainClientVersion = hexdec($clientPeerID[3]);
-		$sub1ClientVersion = hexdec($clientPeerID[4]);
-		$sub2ClientVersion = hexdec($clientPeerID[5]);
-	} else if ($clientUserAgent !== null && stripos($clientUserAgent, 'qbittorrent') !== false) {
-		$clientVerStr = strstr($clientUserAgent, '/');
-		if ($clientVerStr === false) {
-			$clientVerStr = strstr($clientUserAgent, ' ');
-			if (stripos($clientVerStr, 'enhanced') !== false) {
-				$clientVerStr = strstr($clientVerStr, ' ');
+if ($clientUserAgent !== null) {
+	$noWarnClient = false;
+	if (stripos($clientPeerID, '-BC') === 0) {
+		$noWarnClient = true;
+	} else if (stripos($clientPeerID, '-QB') === 0 || stripos($clientUserAgent, 'qbittorrent') !== false) {
+		if (stripos($clientPeerID, '-QB') === 0) {
+			$mainClientVersion = hexdec($clientPeerID[3]);
+			$sub1ClientVersion = hexdec($clientPeerID[4]);
+			$sub2ClientVersion = hexdec($clientPeerID[5]);
+		} else if ($clientUserAgent !== null && stripos($clientUserAgent, 'qbittorrent') !== false) {
+			$clientVerStr = strstr($clientUserAgent, '/');
+			if ($clientVerStr === false) {
+				$clientVerStr = strstr($clientUserAgent, ' ');
+				if (stripos($clientVerStr, 'enhanced') !== false) {
+					$clientVerStr = strstr($clientVerStr, ' ');
+				}
 			}
-		}
-		if ($clientVerStr !== false) {
-			$clientVerExplode = explode('.', substr($clientVerStr, 1));
-			if (count($clientVerExplode) > 2 && is_numeric($clientVerExplode[0]) && is_numeric($clientVerExplode[1])) {
-				$mainClientVersion = intval($clientVerExplode[0]);
-				$sub1ClientVersion = intval($clientVerExplode[1]);
-				if (is_numeric($clientVerExplode[2]) || (strlen($clientVerExplode[2]) > 1 && is_numeric(($clientVerExplode[2] = $clientVerExplode[2][0])))) {
-					$sub2ClientVersion = intval($clientVerExplode[2]);
+			if ($clientVerStr !== false) {
+				$clientVerExplode = explode('.', substr($clientVerStr, 1));
+				if (count($clientVerExplode) > 2 && is_numeric($clientVerExplode[0]) && is_numeric($clientVerExplode[1])) {
+					$mainClientVersion = intval($clientVerExplode[0]);
+					$sub1ClientVersion = intval($clientVerExplode[1]);
+					if (is_numeric($clientVerExplode[2]) || (strlen($clientVerExplode[2]) > 1 && is_numeric(($clientVerExplode[2] = $clientVerExplode[2][0])))) {
+						$sub2ClientVersion = intval($clientVerExplode[2]);
+					}
 				}
 			}
 		}
-	}
-	if (isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) && $mainClientVersion !== false && $sub1ClientVersion !== false && $sub2ClientVersion !== false && ($mainClientVersion > 4 || ($mainClientVersion === 4 && ($sub1ClientVersion > 3 || ($sub1ClientVersion === 3 && $sub2ClientVersion > 6))))) {
-		$noWarnClient = false;
+		if (!isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) || $mainClientVersion === false || $sub1ClientVersion === false || $sub2ClientVersion === false || $mainClientVersion < 4 || ($mainClientVersion === 4 && ($sub1ClientVersion < 3 || ($sub1ClientVersion === 3 && $sub2ClientVersion < 6)))) {
+			$noWarnClient = true;
+		}
 	}
 	if ($noWarnClient) {
-		if ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < $resBencodeArr['interval'] / 2 + 10) {
+		if ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < $resBencodeArr['interval'] / 2 + 30) {
 			die(GenerateBencode(array('failure reason' => (isset($resBencodeArr['warning message']) ? $resBencodeArr['warning message'] : ServerMessage))));
 		}
 		//$resBencodeArr['interval'] = intval(ceil($resBencodeArr['interval'] / 2));
 		$resBencodeArr['min interval'] = $resBencodeArr['interval'];
-	} else if (isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) && $mainClientVersion !== false && $sub1ClientVersion !== false && $sub2ClientVersion !== false && ($mainClientVersion === 4 && $sub1ClientVersion === 5 && $sub2ClientVersion < 2)) {
-		$qB45WarningMessage = 'qBittorrent 4.5 系列 Web UI 暴出未授权任意文件访问漏洞, 将影响安全性. 如果你正在使用该系列客户端, 请考虑升级 4.5.2/关闭 Web UI 对外访问/降级.';
-		$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $qB45WarningMessage : "{$qB45WarningMessage} | {$resBencodeArr['warning message']}");
 	}
 }
 $torrentSeeder = 0;
@@ -258,14 +259,12 @@ if ($db === null) {
 	$torrentDownloaded = ($torrentDownloadedQuery !== false && ($torrentDownloadedResult = $torrentDownloadedQuery->fetch_row()) !== false && $torrentDownloadedResult !== null) ? intval($torrentDownloadedResult[0]) : 0;
 }
 $clientNumwant = (isset($_GET['numwant']) && is_numeric($_GET['numwant'])) ? intval($_GET['numwant']) : 50;
-if ($clientNumwant < 1 || $clientNumwant > 1000) {
+if ($clientNumwant < 1 || $clientNumwant > 200) {
 	$clientNumwant = 50;
 }
-$clientNoPeerID = (isset($_GET['no_peer_id']) && intval($_GET['no_peer_id']) === 1) ? true : false;
+$clientNoPeerID = (isset($_GET['no_peer_id']) && $_GET['no_peer_id'] == 1) ? true : false;
 if (!$clientStoppedOrPaused) {
-	$curNum = 0;
 	// 使用 zset 类型替换, 以加入时间戳, 并通过时间戳淘汰一些未知原因导致停止没有回报而没有清除的客户端, 并放入 autoclean 进行垃圾回收.
-	// 使用 zrevrangebyscore 方法替换, 以返回最新的 peer 并进行 numwant 限制同时防止请求卡在单点上.
 	$infoHashPeerIDSet = $cache->zRevRangeByScore("IH:{$clientInfoHash}", '+inf', 0, ['limit' => [0, $clientNumwant]]);
 	foreach ($infoHashPeerIDSet as $peerID) {
 		if (empty($peerID)) {
@@ -276,10 +275,9 @@ if (!$clientStoppedOrPaused) {
 			continue;
 		}
 		list($peerType, $peerEvent) = explode(':', $peerTypeAndEvent, 2);
-		$peerType = intval($peerType);
-		if ($peerType === 2) {
+		if ($peerType == 2) {
 			$torrentSeeder++;
-		} else if ($peerType === 1) {
+		} else if ($peerType == 1) {
 			$torrentLeecher++;
 		}
 		$peerIPListArr = array(4 => array(), 6 => array());
