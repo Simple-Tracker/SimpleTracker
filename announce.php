@@ -57,6 +57,7 @@ $t = array(
 	)
 );
 */
+/*
 function AddIPToArr(&$arr, ...$ipArr) {
 	foreach ($ipArr as $value) {
 		if ($value === null) {
@@ -87,23 +88,25 @@ function AddIPToArr(&$arr, ...$ipArr) {
 		}
 	}
 }
+*/
 require_once('config.php');
 require_once('include.bencode.php');
 header('Content-Type: text/plain; charset=utf-8');
-$clientUserAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+$clientUserAgent = (!empty($_SERVER['HTTP_USER_AGENT'])) ? $_SERVER['HTTP_USER_AGENT'] : null;
 $clientInfoHash = $_GET['info_hash'] ?? null;
 $clientPeerID = $_GET['peer_id'] ?? null;
 $clientEvent = $_GET['event'] ?? '';
 $clientSupportCrypto = (isset($_GET['supportcrypto']) && intval($_GET['supportcrypto']) === 1) ? true : false;
-if ($clientInfoHash === null || $clientPeerID === null || ($clientEvent !== '' && !in_array(strtolower($clientEvent), array('started', 'stopped', 'paused', 'completed', 'update'))) || ($clientUserAgent !== null && strlen($clientUserAgent) > 233)) {
+if ($clientInfoHash === null || $clientPeerID === null || !in_array(strtolower($clientEvent), array('', 'started', 'stopped', 'paused', 'completed', 'update')) || ($clientUserAgent !== null && strlen($clientUserAgent) > 233)) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[2])));
-} else if ($clientUserAgent !== null && (empty($clientUserAgent) || stripos($clientUserAgent, 'Amazon CloudFront') !== false)) {
-	$clientUserAgent = null;
 }
 $clientEvent = strtolower($clientEvent);
+/*
+于 CDN 侧实现.
 if (preg_match('/^-(XL|SD|XF|QD|BN|DL)(\d+)-/i', $clientPeerID) === 1 || ($clientUserAgent !== null && preg_match('/((^(xunlei?).?\d+.\d+.\d+.\d+)|cacao_torrent)/i', $clientUserAgent) === 1) || preg_match('/^-(UW\w{4}|SP(([0-2]\d{3})|(3[0-5]\d{2})))-/i', $clientPeerID) === 1) {
 	die(GenerateBencode(array('failure reason' => ErrorMessage[6])));
 }
+*/
 $clientInfoHash = strtolower(bin2hex($clientInfoHash));
 //$clientPeerID = bin2hex($clientPeerID);
 if (strlen($clientInfoHash) !== 40 || strlen($clientPeerID) < 12 || strlen($clientPeerID) > 20 || $clientInfoHash === $clientPeerID || preg_match('/(.)\1{32}/i', $clientInfoHash) === 1 || preg_match('/(.)\1{12}/i', $clientPeerID) === 1) {
@@ -120,12 +123,7 @@ $clientStoppedOrPaused = (in_array($clientEvent, array('stopped', 'paused')));
 if ($clientLeft !== null) {
 	$clientType = (intval($clientLeft) === 0) ? 2 : 1;
 }
-if ($clientUserAgent !== null && stripos($clientUserAgent, 'bitcomet') !== false && (($bcClientVersion = strstr($clientUserAgent, '/')) === false || strlen($bcClientVersion) < 2 || (($bcClientVersion = explode('.', substr($bcClientVersion, 1))) && count($bcClientVersion) < 2) || !is_numeric($bcClientVersion[0]) || !is_numeric($bcClientVersion[1]) || intval($bcClientVersion[0]) < 1 || (intval($bcClientVersion[0]) === 1 && intval($bcClientVersion[1]) < 82))) {
-	if ($clientType !== 2) {
-		die(GenerateBencode(array('failure reason' => ErrorMessage[7])));
-	}
-	$resBencodeArr['warning message'] = WarningMessage[3];
-} else if (isset($_SERVER['HTTP_WANT_DIGEST']) && !(($clientUserAgent !== null && stripos($clientUserAgent, 'aria2') !== false) || stripos($clientPeerID, 'A2') === 0)) {
+if (isset($_SERVER['HTTP_WANT_DIGEST']) && !(($clientUserAgent !== null && stripos($clientUserAgent, 'aria2') !== false) || stripos($clientPeerID, 'A2') === 0)) {
 	if ($clientType !== 2) {
 		die(GenerateBencode(array('failure reason' => ErrorMessage[6])));
 	}
@@ -209,46 +207,40 @@ if ($db !== null) {
 		$resBencodeArr['warning message'] = (!isset($resBencodeArr['warning message']) ? $clientMessageList : "{$clientMessageList} | {$resBencodeArr['warning message']}");
 	}
 }
-$clientAnnounceExpirationTime = $cache->ttl("IP:{$clientInfoHash}+{$clientPeerID}:TE");
-if ($clientUserAgent !== null) {
-	$noWarnClient = false;
-	if (stripos($clientPeerID, '-BC') === 0) {
+$noWarnClient = false;
+if (stripos($clientPeerID, '-BC') === 0) {
+	$noWarnClient = true;
+} else if (($qBPeerIDCheck = stripos($clientPeerID, '-QB')) === 0 || ($qBUACheck = ($clientUserAgent !== null ? stripos($clientUserAgent, 'qbittorrent') : false)) !== false) {
+	if ($qBPeerIDCheck === 0) {
+		$mainClientVersion = hexdec($clientPeerID[3]);
+		$sub1ClientVersion = hexdec($clientPeerID[4]);
+		$sub2ClientVersion = hexdec($clientPeerID[5]);
+	} else if ($qBUACheck !== false) {
+		$clientVerStr = strstr($clientUserAgent, '/');
+		if ($clientVerStr === false) {
+			$clientVerStr = strstr($clientUserAgent, ' ');
+			if (stripos($clientVerStr, 'enhanced') !== false) {
+				$clientVerStr = strstr($clientVerStr, ' ');
+			}
+		}
+		if ($clientVerStr !== false) {
+			$clientVerExplode = explode('.', substr($clientVerStr, 1));
+			if (count($clientVerExplode) > 2 && is_numeric($clientVerExplode[0]) && is_numeric($clientVerExplode[1])) {
+				$mainClientVersion = intval($clientVerExplode[0]);
+				$sub1ClientVersion = intval($clientVerExplode[1]);
+				if (is_numeric($clientVerExplode[2]) || (strlen($clientVerExplode[2]) > 1 && is_numeric(($clientVerExplode[2] = $clientVerExplode[2][0])))) {
+					$sub2ClientVersion = intval($clientVerExplode[2]);
+				}
+			}
+		}
+	}
+	if (!isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) || $mainClientVersion === false || $sub1ClientVersion === false || $sub2ClientVersion === false || $mainClientVersion < 4 || ($mainClientVersion === 4 && ($sub1ClientVersion < 3 || ($sub1ClientVersion === 3 && $sub2ClientVersion < 6)))) {
 		$noWarnClient = true;
-	} else if (stripos($clientPeerID, '-QB') === 0 || stripos($clientUserAgent, 'qbittorrent') !== false) {
-		if (stripos($clientPeerID, '-QB') === 0) {
-			$mainClientVersion = hexdec($clientPeerID[3]);
-			$sub1ClientVersion = hexdec($clientPeerID[4]);
-			$sub2ClientVersion = hexdec($clientPeerID[5]);
-		} else if ($clientUserAgent !== null && stripos($clientUserAgent, 'qbittorrent') !== false) {
-			$clientVerStr = strstr($clientUserAgent, '/');
-			if ($clientVerStr === false) {
-				$clientVerStr = strstr($clientUserAgent, ' ');
-				if (stripos($clientVerStr, 'enhanced') !== false) {
-					$clientVerStr = strstr($clientVerStr, ' ');
-				}
-			}
-			if ($clientVerStr !== false) {
-				$clientVerExplode = explode('.', substr($clientVerStr, 1));
-				if (count($clientVerExplode) > 2 && is_numeric($clientVerExplode[0]) && is_numeric($clientVerExplode[1])) {
-					$mainClientVersion = intval($clientVerExplode[0]);
-					$sub1ClientVersion = intval($clientVerExplode[1]);
-					if (is_numeric($clientVerExplode[2]) || (strlen($clientVerExplode[2]) > 1 && is_numeric(($clientVerExplode[2] = $clientVerExplode[2][0])))) {
-						$sub2ClientVersion = intval($clientVerExplode[2]);
-					}
-				}
-			}
-		}
-		if (!isset($mainClientVersion, $sub1ClientVersion, $sub2ClientVersion) || $mainClientVersion === false || $sub1ClientVersion === false || $sub2ClientVersion === false || $mainClientVersion < 4 || ($mainClientVersion === 4 && ($sub1ClientVersion < 3 || ($sub1ClientVersion === 3 && $sub2ClientVersion < 6)))) {
-			$noWarnClient = true;
-		}
 	}
-	if ($noWarnClient) {
-		if ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < $resBencodeArr['interval'] / 2 + 30) {
-			die(GenerateBencode(array('failure reason' => (isset($resBencodeArr['warning message']) ? $resBencodeArr['warning message'] : ServerMessage))));
-		}
-		//$resBencodeArr['interval'] = intval(ceil($resBencodeArr['interval'] / 2));
-		$resBencodeArr['min interval'] = $resBencodeArr['interval'];
-	}
+}
+if ($noWarnClient) {
+	$resBencodeArr['interval'] *= 2;
+	$resBencodeArr['min interval'] *= 2;
 }
 $torrentSeeder = 0;
 $torrentLeecher = 0;
@@ -264,7 +256,7 @@ if ($clientNumwant < 1 || $clientNumwant > 200) {
 }
 $clientNoPeerID = (isset($_GET['no_peer_id']) && $_GET['no_peer_id'] == 1) ? true : false;
 if (!$clientStoppedOrPaused) {
-	// 使用 zset 类型替换, 以加入时间戳, 并通过时间戳淘汰一些未知原因导致停止没有回报而没有清除的客户端, 并放入 autoclean 进行垃圾回收.
+	// 待实现: 通过随机改善性能. 应优先给客户端返回 Leecher 促进 Peer 交换, 不足再由 Seeder 补充.
 	$infoHashPeerIDSet = $cache->zRevRangeByScore("IH:{$clientInfoHash}", '+inf', 0, ['limit' => [0, $clientNumwant]]);
 	foreach ($infoHashPeerIDSet as $peerID) {
 		if (empty($peerID)) {
@@ -289,7 +281,14 @@ if (!$clientStoppedOrPaused) {
 			if ($peerPort === 0 || $peerPort === 1) {
 				continue;
 			}
-			$peerIPListArr[4][] = array('ip' => $peerIPv4, 'port' => $peerPort);
+			if ($clientCompact) {
+				$resBencodeArr['peers'] .= inet_pton($peerIPv4) . pack('n', $peerPort);
+			} else {
+				if (!$clientNoPeerID) {
+					$peerIP['peer_id'] = $peerID;
+				}
+				$resBencodeArr['peers'][] = $peerIPv4;
+			}
 		}
 		foreach ($peerIPv6Set as $peerFullIPv6) {
 			$peerIPv6Arr = explode(':', $peerFullIPv6);
@@ -298,18 +297,13 @@ if (!$clientStoppedOrPaused) {
 				continue;
 			}
 			$peerIPv6 = str_replace(":{$peerPort}", '', $peerFullIPv6);
-			$peerIPListArr[6][] = array('ip' => $peerIPv6, 'port' => $peerPort);
-		}
-		foreach ($peerIPListArr as $peerIPType => $peerIPList) {
-			foreach ($peerIPList as $peerIP) {
-				if ($clientCompact) {
-					$resBencodeArr[($peerIPType === 4 ? 'peers' : 'peers6')] .= inet_pton($peerIP['ip']) . pack('n', $peerIP['port']);
-				} else {
-					if (!$clientNoPeerID) {
-						$peerIP['peer_id'] = $peerID;
-					}
-					$resBencodeArr['peers'][] = $peerIP;
+			if ($clientCompact) {
+				$resBencodeArr['peers6'] .= inet_pton($peerIPv6) . pack('n', $peerPort);
+			} else {
+				if (!$clientNoPeerID) {
+					$peerIP['peer_id'] = $peerID;
 				}
+				$resBencodeArr['peers'][] = $peerIPv6;
 			}
 		}
 	}
@@ -330,7 +324,6 @@ if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
 } else {
 	$clientIP = $_SERVER['REMOTE_ADDR'];
 }
-$clientIP = strtolower($clientIP);
 /*
 $clientIPList = $_GET['ip'] ?? null;
 $clientIPv4List = $_GET['ipv4'] ?? null;
@@ -342,9 +335,18 @@ if (($clientPort = intval($clientPort)) > 1 && $clientPort < 65536) {
 	$validClientIPList = array();
 	#AddIPToArr($validClientIPList, $clientIPList, $clientIPv4List, $clientIPv6List, $clientIPsList);
 	# !isset($validClientIPList['ipv4']), !isset($validClientIPList['ipv6'])
+	/*
 	if (filter_var($clientIP, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
 		$validClientIPList['ipv4'][] = $clientIP;
 	} else if (filter_var($clientIP, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+		$validClientIPList['ipv6'][] = $clientIP;
+	}
+	*/
+	$clientIP = strtolower($clientIP);
+	// 相信 CDN 侧传入 IP, 不再另行校验.
+	if (!stripos($clientIP, ':')) {
+		$validClientIPList['ipv4'][] = $clientIP;
+	} else {
 		$validClientIPList['ipv6'][] = $clientIP;
 	}
 } else {
@@ -385,7 +387,6 @@ if ($clientType !== 0) {
 		$cache->zRem("IH:{$clientInfoHash}", $clientPeerID);
 		$cache->unlink("IP:{$clientInfoHash}+{$clientPeerID}:TE");
 	} else {
-		$clientIsReannounced = ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < ($resBencodeArr['min interval'] / 8)) ? true : false;
 		// 出于 IPv4/IPv6 多重回报, 目前不阻止 (也没必要阻止) 重复回报更新 Peer 记录.
 		$multiQuery = $cache->multi(Redis::PIPELINE);
 		$multiQuery->zAdd("IH:{$clientInfoHash}", $curTime, $clientPeerID);
@@ -409,17 +410,21 @@ if ($clientType !== 0) {
 			$multiQuery->expire("PI:A6:{$clientPeerID}", ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval));
 		}
 		$multiQuery->exec();
-		if (!$clientIsReannounced && $clientEvent === 'completed' && $db !== null) {
-			#$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed, total_uploaded, total_downloaded) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed), total_uploaded = total_uploaded + VALUES(total_uploaded), total_downloaded = total_downloaded + VALUES(total_downloaded)");
-			/*
-			$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed) VALUES (?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
-			#$torrentSTMT->bind_param('siii', $clientInfoHash, $newCompleted, $clientUploaded, $clientDownloaded);
-			$torrentSTMT->bind_param('si', $clientInfoHash, $newCompleted);
-			$torrentSTMT->execute();
-			$torrentSTMT->close();
-			*/
-			#$newCompleted = ($clientEvent === 'completed' ? 1 : 0);
-			$torrentQuery = $db->query("INSERT INTO Torrents (info_hash, total_completed) VALUES ('{$escapedClientInfoHash}', 1) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
+		if ($clientEvent === 'completed' && $db !== null) {
+			$clientAnnounceExpirationTime = $cache->ttl("IP:{$clientInfoHash}+{$clientPeerID}:TE");
+			$clientIsReannounced = ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < ($resBencodeArr['min interval'] / 8)) ? true : false;
+			if (!$clientIsReannounced && $db !== null) {
+				#$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed, total_uploaded, total_downloaded) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed), total_uploaded = total_uploaded + VALUES(total_uploaded), total_downloaded = total_downloaded + VALUES(total_downloaded)");
+				/*
+				$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed) VALUES (?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
+				#$torrentSTMT->bind_param('siii', $clientInfoHash, $newCompleted, $clientUploaded, $clientDownloaded);
+				$torrentSTMT->bind_param('si', $clientInfoHash, $newCompleted);
+				$torrentSTMT->execute();
+				$torrentSTMT->close();
+				*/
+				#$newCompleted = ($clientEvent === 'completed' ? 1 : 0);
+				$torrentQuery = $db->query("INSERT INTO Torrents (info_hash, total_completed) VALUES ('{$escapedClientInfoHash}', 1) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
+			}
 		}
 	}
 }
