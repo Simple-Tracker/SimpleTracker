@@ -2,18 +2,16 @@
 //chdir(__DIR__);
 date_default_timezone_set('Asia/Shanghai');
 define('LogDir', 'logs-Custom');
-define('ServerURL', 'https://t1.hloli.org');
-define('ServerMessage', '服务器 Telegram 群组 (反馈与交流 BitTorrent 相关内容): https://t.me/SimpleTrackerGroup');
 
 // Database Config
 mysqli_report(MYSQLI_REPORT_OFF);
 define('DBAddress', 'localhost');
 define('DBPAddress', 'p:localhost');
-define('DBPort', 3306); // port or null.
+define('DBPort', 3306); // Port or null.
 define('DBUser', '');
 define('DBPass', '');
 define('DBName', '');
-define('DBSocket', '/var/lib/mysql/mysql.sock'); // socket or null.
+define('DBSocket', '/var/lib/mysql/mysql.sock'); // Socket or null.
 define('DBRetryWaitTime', 10);
 $curHour = intval(date('h'));
 define('CurDBName', 'Peers_' . (($curHour === 2 || $curHour === 4 || $curHour === 6 || $curHour === 8 || $curHour === 10 || $curHour === 12) ? '1' : '2'));
@@ -23,7 +21,7 @@ define('OldDBName', 'Peers_' . (CurDBName === 'Peers_2' ? '1' : '2'));
 define('CacheAddress', '/var/run/redis/redis.sock');
 define('CachePort', 0);
 define('CachePersistence', true);
-define('CacheAuth', null); // auth or null.
+define('CacheAuth', null); // Auth or null.
 define('CacheTimeout', 16); // Second.
 define('CacheRetryWaitTime', 10);
 
@@ -77,6 +75,7 @@ define('PremiumAnnounceMaxInterval', ceil(PremiumAnnounceInterval * 2));
 define('ScrapeMinInterval', 120);
 
 // Message Config
+define('ServerMessage', '服务器 Telegram 群组 (反馈与交流 BitTorrent 相关内容): https://t.me/SimpleTrackerGroup'); // Message or null.
 define('ErrorMessage', array(
 	1 => '服务器内部错误. (EC: 1)',
 	2 => '服务器不喜欢你, 因此你不得不爬. (EC: 2)',

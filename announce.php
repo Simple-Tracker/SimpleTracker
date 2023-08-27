@@ -440,15 +440,17 @@ $key = $_GET['key'] ?? null;
 $corrupt = $_GET['corrupt'] ?? null;
 $redundant = $_GET['redundant'] ?? null;
 */
-if (!isset($resBencodeArr['warning message'])) {
-	if ($debugLevel === 0 && ($clientUserAgent !== null && stripos($clientUserAgent, 'transmission') !== false) || stripos($clientPeerID, '-TR') === 0) {
-		$resBencodeArr['interval'] *= 2;
-		$resBencodeArr['min interval'] *= 2;
+if (ServerMessage !== null) {
+	if (!isset($resBencodeArr['warning message'])) {
+		if ($debugLevel === 0 && ($clientUserAgent !== null && stripos($clientUserAgent, 'transmission') !== false) || stripos($clientPeerID, '-TR') === 0) {
+			$resBencodeArr['interval'] *= 2;
+			$resBencodeArr['min interval'] *= 2;
+		} else {
+			$resBencodeArr['warning message'] = ServerMessage;
+		}
 	} else {
-		$resBencodeArr['warning message'] = ServerMessage;
+		$resBencodeArr['warning message'] .= ' | ' . ServerMessage;
 	}
-} else {
-	$resBencodeArr['warning message'] .= ' | ' . ServerMessage;
 }
 switch ($debugLevel) {
 	case 10:
