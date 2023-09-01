@@ -166,7 +166,7 @@ while (true) {
 		LogStr("已尝试自动限制 Bot, 返回信息: {$restrictResult}", (($restrictResult !== false) ? 0 : -1));
 	}
 	*/
-	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1); // 完成数统计. (每月 1 号执行)
+	$cleanRule1 = ($lastDate1 !== "{$curMonth}-{$curDay}" && $curDay === 1 && $curHour < 2); // 完成数统计. (每月 1 号执行)
 	#$cleanRule21 = ($lastHour21 !== $curHour && $curMinute >= 15 && $curMinute <= 30); // 每小时执行 1 次.
 	$cleanRule21 = false;
 	$cleanRule22 = ($lastHour22 !== $curHour && $curMinute >= 45 && $curMinute <= 60); // 每小时执行 1 次.
