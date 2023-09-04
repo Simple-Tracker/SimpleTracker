@@ -387,6 +387,22 @@ if ($clientType !== 0) {
 		$cache->zRem("IH:{$clientInfoHash}", $clientPeerID);
 		$cache->unlink("IP:{$clientInfoHash}+{$clientPeerID}:TE");
 	} else {
+		if ($clientEvent === 'completed' && $db !== null) {
+			$clientAnnounceExpirationTime = $cache->ttl("IP:{$clientInfoHash}+{$clientPeerID}:TE");
+			$clientIsReannounced = ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < ($resBencodeArr['min interval'] / 8)) ? true : false;
+			if (!$clientIsReannounced) {
+				#$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed, total_uploaded, total_downloaded) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed), total_uploaded = total_uploaded + VALUES(total_uploaded), total_downloaded = total_downloaded + VALUES(total_downloaded)");
+				/*
+				$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed) VALUES (?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
+				#$torrentSTMT->bind_param('siii', $clientInfoHash, $newCompleted, $clientUploaded, $clientDownloaded);
+				$torrentSTMT->bind_param('si', $clientInfoHash, $newCompleted);
+				$torrentSTMT->execute();
+				$torrentSTMT->close();
+				*/
+				#$newCompleted = ($clientEvent === 'completed' ? 1 : 0);
+				$torrentQuery = $db->query("INSERT INTO Torrents (info_hash, total_completed) VALUES ('{$escapedClientInfoHash}', 1) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
+			}
+		}
 		// 出于 IPv4/IPv6 多重回报, 目前不阻止 (也没必要阻止) 重复回报更新 Peer 记录.
 		$multiQuery = $cache->multi(Redis::PIPELINE);
 		$multiQuery->zAdd("IH:{$clientInfoHash}", $curTime, $clientPeerID);
@@ -410,22 +426,6 @@ if ($clientType !== 0) {
 			$multiQuery->expire("PI:A6:{$clientPeerID}", ($premiumUser ? PremiumAnnounceMaxInterval : AnnounceMaxInterval));
 		}
 		$multiQuery->exec();
-		if ($clientEvent === 'completed' && $db !== null) {
-			$clientAnnounceExpirationTime = $cache->ttl("IP:{$clientInfoHash}+{$clientPeerID}:TE");
-			$clientIsReannounced = ($clientAnnounceExpirationTime > 0 && $clientAnnounceExpirationTime < ($resBencodeArr['min interval'] / 8)) ? true : false;
-			if (!$clientIsReannounced && $db !== null) {
-				#$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed, total_uploaded, total_downloaded) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed), total_uploaded = total_uploaded + VALUES(total_uploaded), total_downloaded = total_downloaded + VALUES(total_downloaded)");
-				/*
-				$torrentSTMT = $db->prepare("INSERT INTO Torrents (info_hash, total_completed) VALUES (?, ?) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
-				#$torrentSTMT->bind_param('siii', $clientInfoHash, $newCompleted, $clientUploaded, $clientDownloaded);
-				$torrentSTMT->bind_param('si', $clientInfoHash, $newCompleted);
-				$torrentSTMT->execute();
-				$torrentSTMT->close();
-				*/
-				#$newCompleted = ($clientEvent === 'completed' ? 1 : 0);
-				$torrentQuery = $db->query("INSERT INTO Torrents (info_hash, total_completed) VALUES ('{$escapedClientInfoHash}', 1) ON DUPLICATE KEY UPDATE total_completed = total_completed + VALUES(total_completed)");
-			}
-		}
 	}
 }
 if ($db !== null) {
