@@ -452,6 +452,11 @@ if (ServerMessage !== null) {
 		$resBencodeArr['warning message'] .= ' | ' . ServerMessage;
 	}
 }
+if (AnnounceRandomInterval !== null) {
+	$randInterval = mt_rand(AnnounceRandomInterval[0], AnnounceRandomInterval[1]) / 10;
+	$resBencodeArr['interval'] *= $randInterval;
+	$resBencodeArr['min interval'] *= $randInterval;
+}
 switch ($debugLevel) {
 	case 10:
 		$resBencodeArr['warning message'] = sprintf(
