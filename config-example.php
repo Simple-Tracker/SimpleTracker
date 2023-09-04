@@ -86,7 +86,8 @@ define('ErrorMessage', array(
 	7 => 'The server has banned your client, it is recommended that you switch to the new version of the client. (EC: 7)',
 	8 => '服务器无法验证这个 SimpleTracker Key. (EC: 8)',
 	9 => '服务器认为传递的信息不合法. (EC: 9)',
-	10 => '服务器发现这个种子在黑名单. (EC: 10)'
+	10 => '服务器发现这个种子在黑名单. (EC: 10)',
+	11 => '服务器当前不提供此服务. (EC: 11)'
 ));
 define('WarningMessage', array(
 	1 => '服务器无法验证你的端口, 因此你的速度可能会受到影响. (WC: 1)',
