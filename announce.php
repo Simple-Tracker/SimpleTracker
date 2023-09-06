@@ -428,6 +428,10 @@ if ($clientType !== 0) {
 		$multiQuery->exec();
 	}
 }
+if ($debugLevel > 0) {
+	$clientIPv4String = ($cache->zCard("PI:A4:{$clientPeerID}") > 0) ? '有' : '无';
+	$clientIPv6String = ($cache->zCard("PI:A6:{$clientPeerID}") > 0) ? '有' : '无';
+}
 if ($db !== null) {
 	$db->close();
 }
@@ -453,16 +457,16 @@ if (ServerMessage !== null) {
 	}
 }
 if (AnnounceRandomInterval !== null) {
-	$randInterval = mt_rand(AnnounceRandomInterval[0], AnnounceRandomInterval[1]) / 10;
-	$resBencodeArr['interval'] *= $randInterval;
-	$resBencodeArr['min interval'] *= $randInterval;
+	$randInterval = mt_rand(AnnounceRandomInterval[0], AnnounceRandomInterval[1]) / 100;
+	$resBencodeArr['interval'] = intval($resBencodeArr['interval'] * $randInterval);
+	$resBencodeArr['min interval'] = intval($resBencodeArr['min interval'] * $randInterval);
 }
 switch ($debugLevel) {
 	case 10:
 		$resBencodeArr['warning message'] = sprintf(
 			"Debug 高级信息/IPv4: %s, IPv6: %s, 端口: %d, 客户端: %s (Peer ID: %s), 事件: %s, 加密支持: %s, 紧凑模式: %s, 省略其它客户端的 Peer ID: %s, 当前回报间隔: %u, 最小回报间隔: %u | {$resBencodeArr['warning message']}",
-			($clientIPv4String ?? '空'),
-			($clientIPv6String ?? '空'),
+			$clientIPv4String,
+			$clientIPv6String,
 			($clientPort ?? -1),
 			($clientUserAgent ?? '空'),
 			(!empty($clientPeerID) ? substr($clientPeerID, 0, 8) : '空'),
@@ -477,8 +481,8 @@ switch ($debugLevel) {
 	case 1:
 		$resBencodeArr['warning message'] = sprintf(
 			"Debug 基本信息/IPv4: %s, IPv6: %s, 客户端: %s | {$resBencodeArr['warning message']}",
-			($clientIPv4String ?? '空'),
-			($clientIPv6String ?? '空'),
+			$clientIPv4String,
+			$clientIPv6String,
 			($clientUserAgent ?? '空')
 		);
 		break;

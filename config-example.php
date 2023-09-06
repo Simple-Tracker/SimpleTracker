@@ -73,7 +73,7 @@ define('PremiumAnnounceInterval', 300);
 define('PremiumAnnounceMinInterval', 60);
 define('PremiumAnnounceMaxInterval', ceil(PremiumAnnounceInterval * 2));
 define('ScrapeMinInterval', 120);
-define('AnnounceRandomInterval', [10, 15]); // Array or null.
+define('AnnounceRandomInterval', [100, 150]); // Array or null.
 
 // Message Config
 define('ServerMessage', '服务器 Telegram 群组 (反馈与交流 BitTorrent 相关内容): https://t.me/SimpleTrackerGroup'); // Message or null.
