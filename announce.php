@@ -148,6 +148,7 @@ try {
 		$cache->auth(CacheAuth);
 	}
 	if ($cache->ping() !== true) {
+		$cache->close();
 		die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
 	}
 } catch (Exception $e) {
