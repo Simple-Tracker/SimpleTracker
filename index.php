@@ -1,8 +1,9 @@
 <?php
 if (isset($_GET['info_hash']) || isset($_GET['peer_id']) || isset($_GET['event'])) {
-	require_once('include.bencode.php');
+	require_once('Bencode.php');
+	use \PureBencode\Bencode;
 	header('Content-Type: text/plain; charset=utf-8');
-	die(GenerateBencode(array('failure reason' => '服务器认为 Tracker 地址有误. (EC: 5)')));
+	die(Bencode::encode(array('failure reason' => '服务器认为 Tracker 地址有误. (EC: 5)')));
 }
 define('BotUAKeywords', array('bot', 'crawl', 'spider' ,'slurp', 'sohu-search', 'lycos', 'robozilla'));
 function IsRobot() {

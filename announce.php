@@ -90,7 +90,8 @@ function AddIPToArr(&$arr, ...$ipArr) {
 }
 */
 require_once('config.php');
-require_once('include.bencode.php');
+require_once('Bencode.php');
+use \PureBencode\Bencode;
 header('Content-Type: text/plain; charset=utf-8');
 $clientUserAgent = (!empty($_SERVER['HTTP_USER_AGENT'])) ? $_SERVER['HTTP_USER_AGENT'] : null;
 $clientInfoHash = $_GET['info_hash'] ?? null;
@@ -98,23 +99,23 @@ $clientPeerID = $_GET['peer_id'] ?? null;
 $clientEvent = $_GET['event'] ?? '';
 $clientSupportCrypto = (isset($_GET['supportcrypto']) && intval($_GET['supportcrypto']) === 1) ? true : false;
 if ($clientInfoHash === null || $clientPeerID === null || !in_array(strtolower($clientEvent), array('', 'started', 'stopped', 'paused', 'completed', 'update')) || ($clientUserAgent !== null && strlen($clientUserAgent) > 233)) {
-	die(GenerateBencode(array('failure reason' => ErrorMessage[2])));
+	die(Bencode::encode(array('failure reason' => ErrorMessage[2])));
 }
 $clientEvent = strtolower($clientEvent);
 /*
 于 CDN 侧实现.
 if (preg_match('/^-(XL|SD|XF|QD|BN|DL)(\d+)-/i', $clientPeerID) === 1 || ($clientUserAgent !== null && preg_match('/((^(xunlei?).?\d+.\d+.\d+.\d+)|cacao_torrent)/i', $clientUserAgent) === 1) || preg_match('/^-(UW\w{4}|SP(([0-2]\d{3})|(3[0-5]\d{2})))-/i', $clientPeerID) === 1) {
-	die(GenerateBencode(array('failure reason' => ErrorMessage[6])));
+	die(Bencode::encode(array('failure reason' => ErrorMessage[6])));
 }
 */
 $clientInfoHash = strtolower(bin2hex($clientInfoHash));
 //$clientPeerID = bin2hex($clientPeerID);
 if (strlen($clientInfoHash) !== 40 || strlen($clientPeerID) < 12 || strlen($clientPeerID) > 20 || $clientInfoHash === $clientPeerID || preg_match('/(.)\1{32}/i', $clientInfoHash) === 1 || preg_match('/(.)\1{12}/i', $clientPeerID) === 1) {
-	die(GenerateBencode(array('failure reason' => ErrorMessage[3])));
+	die(Bencode::encode(array('failure reason' => ErrorMessage[3])));
 }
 /*
 if ($clientInfoHash !== '457b1b9f117d95cf7982b6deb6c5fdd14f3f0180') {
-	die(GenerateBencode(array('failure reason' => '服务器无法验证这个种子, 可能是因为它没有被注册. (EC: 4)')));
+	die(Bencode::encode(array('failure reason' => '服务器无法验证这个种子, 可能是因为它没有被注册. (EC: 4)')));
 }$
 */
 $clientLeft = $_GET['left'] ?? null;
@@ -125,7 +126,7 @@ if ($clientLeft !== null) {
 }
 if (isset($_SERVER['HTTP_WANT_DIGEST']) && !(($clientUserAgent !== null && stripos($clientUserAgent, 'aria2') !== false) || stripos($clientPeerID, 'A2') === 0)) {
 	if ($clientType !== 2) {
-		die(GenerateBencode(array('failure reason' => ErrorMessage[6])));
+		die(Bencode::encode(array('failure reason' => ErrorMessage[6])));
 	}
 	$resBencodeArr['warning message'] = WarningMessage[4];
 }
@@ -134,7 +135,7 @@ if (DBPort === null) {
 } else {
 	$db = @new MySQLi(DBPAddress, DBUser, DBPass, DBName, DBPort, DBSocket);
 	if ($db->connect_errno > 0) {
-		die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+		die(Bencode::encode(array('failure reason' => ErrorMessage[1])));
 	}
 }
 try {
@@ -149,24 +150,24 @@ try {
 	}
 	if ($cache->ping() !== true) {
 		$cache->close();
-		die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+		die(Bencode::encode(array('failure reason' => ErrorMessage[1])));
 	}
 } catch (Exception $e) {
-	die(GenerateBencode(array('failure reason' => ErrorMessage[1])));
+	die(Bencode::encode(array('failure reason' => ErrorMessage[1])));
 }
 $debugLevel = 0;
 $premiumUser = false;
 if (isset($_GET['debug'])) {
 	$debugLevel = CheckKeyAvailability($_GET['debug']);
 	if ($debugLevel === 0) {
-		die(GenerateBencode(array('failure reason' => ErrorMessage[8])));
+		die(Bencode::encode(array('failure reason' => ErrorMessage[8])));
 	}
 	if ($debugLevel === 10) {
 		$premiumUser = true;
 	}
 } else if (isset($_GET['p'])) {
 	if (CheckKeyAvailability($_GET['p']) <= 1) {
-		die(GenerateBencode(array('failure reason' => ErrorMessage[8])));
+		die(Bencode::encode(array('failure reason' => ErrorMessage[8])));
 	}
 	$premiumUser = true;
 }
@@ -181,13 +182,13 @@ if ($db !== null) {
 	$escapedClientInfoHash = $db->escape_string($clientInfoHash);
 	$torrentBlocklistCheck = $db->query("SELECT 1 FROM Blocklist WHERE info_hash = '{$escapedClientInfoHash}' LIMIT 1");
 	if ($torrentBlocklistCheck === false || $torrentBlocklistCheck->num_rows > 0) {
-		die(GenerateBencode(array('failure reason' => ErrorMessage[10])));
+		die(Bencode::encode(array('failure reason' => ErrorMessage[10])));
 	}
 }
 if ($premiumUser && $db !== null) {
 	if ($curSimpleTrackerKey !== null && !$clientStoppedOrPaused && isset($_GET['m']) && !empty($_GET['m']) && strpos($_GET['m'], '+') === false && strpos($_GET['m'], '|') === false) {
 		if (strlen($_GET['m']) > 48) {
-			die(GenerateBencode(array('failure reason' => ErrorMessage[9])));
+			die(Bencode::encode(array('failure reason' => ErrorMessage[9])));
 		}
 		$clientMessageEscapedContent = $db->escape_string($_GET['m']);
 		$clientMessageInsertQuery = $db->query("INSERT INTO Messages (`info_hash`, `key`, `message`) VALUES ('{$escapedClientInfoHash}', '{$curSimpleTrackerKey}', '{$clientMessageEscapedContent}') ON DUPLICATE KEY UPDATE message = VALUE(message), last_timestamp = current_timestamp()");
@@ -491,5 +492,5 @@ switch ($debugLevel) {
 	default:
 		break;
 }
-echo GenerateBencode($resBencodeArr);
+echo Bencode::encode($resBencodeArr);
 ?>
