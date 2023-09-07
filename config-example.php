@@ -18,6 +18,7 @@ define('CurDBName', 'Peers_' . (($curHour === 2 || $curHour === 4 || $curHour ==
 define('OldDBName', 'Peers_' . (CurDBName === 'Peers_2' ? '1' : '2'));
 
 // Redis Config
+ini_set('redis.pconnect.echo_check_liveness', 0);
 define('CacheAddress', '/var/run/redis/redis.sock');
 define('CachePort', 0);
 define('CachePersistence', true);
