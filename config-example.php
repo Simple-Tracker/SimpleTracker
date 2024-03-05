@@ -13,9 +13,6 @@ define('DBPass', '');
 define('DBName', '');
 define('DBSocket', '/var/lib/mysql/mysql.sock'); // Socket or null.
 define('DBRetryWaitTime', 10);
-$curHour = intval(date('h'));
-define('CurDBName', 'Peers_' . (($curHour === 2 || $curHour === 4 || $curHour === 6 || $curHour === 8 || $curHour === 10 || $curHour === 12) ? '1' : '2'));
-define('OldDBName', 'Peers_' . (CurDBName === 'Peers_2' ? '1' : '2'));
 
 // Redis Config
 ini_set('redis.pconnect.echo_check_liveness', 0);
@@ -34,6 +31,7 @@ define('UserKeyDir', 'UserKey-Custom');
 // 返回 Debug Level.
 function CheckKeyAvailability(string $key): int {
 	global $db, $curSimpleTrackerKey;
+
 	if ($key === GeneralDebugKey) {
 		$curSimpleTrackerKey = GeneralDebugKey;
 		return 1;
@@ -50,6 +48,7 @@ function CheckKeyAvailability(string $key): int {
 		}
 	}
 	$curSimpleTrackerKey = null;
+
 	return 0;
 }
 
